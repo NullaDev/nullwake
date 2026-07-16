@@ -26,6 +26,10 @@ var toast_timer: Timer
 var export_box: TextEdit
 var guess_input: LineEdit
 var decrypt_sidebar_box: VBoxContainer
+var decrypt_detail_margin: MarginContainer
+var current_ai_selector: OptionButton
+var ai_menu_open := false
+var pending_decrypt_detail_refresh := false
 var guess_drafts: Dictionary = {}
 var active_scroll: ScrollContainer
 var page_scroll_positions: Dictionary = {}
@@ -285,6 +289,11 @@ func _build_current_page() -> void:
 	_remember_scroll_position()
 	_clear(content_host)
 	active_scroll = null
+	decrypt_sidebar_box = null
+	decrypt_detail_margin = null
+	current_ai_selector = null
+	ai_menu_open = false
+	pending_decrypt_detail_refresh = false
 	match current_page:
 		"decrypt": _build_decrypt_page()
 		"nodes": _build_nodes_page()
@@ -299,13 +308,20 @@ func _build_current_page() -> void:
 
 func _on_game_changed(reason: String) -> void:
 	selected_channel = clampi(selected_channel, 0, game.data.channels.size() - 1)
+	if nav_bar.visible != bool(game.data.tutorial_completed):
+		_build_navigation()
 	var changed_channel := _channel_from_reason(reason)
 	if changed_channel >= 0 and current_page != "decrypt":
 		_build_top_bar()
 		return
-	if current_page == "decrypt" and changed_channel >= 0 and changed_channel != selected_channel:
+	if current_page == "decrypt" and changed_channel >= 0:
 		_build_top_bar()
 		_refresh_decrypt_sidebar()
+		if changed_channel == selected_channel:
+			if ai_menu_open:
+				pending_decrypt_detail_refresh = true
+			else:
+				_refresh_decrypt_detail()
 		return
 	_rebuild_all()
 
@@ -358,21 +374,33 @@ func _build_decrypt_page() -> void:
 	var detail := _panel(Color("071117"), Color("244b50"), 1)
 	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	layout.add_child(detail)
-	var detail_margin := MarginContainer.new()
-	detail_margin.add_theme_constant_override("margin_left", 22)
-	detail_margin.add_theme_constant_override("margin_right", 22)
-	detail_margin.add_theme_constant_override("margin_top", 18)
-	detail_margin.add_theme_constant_override("margin_bottom", 18)
-	detail.add_child(detail_margin)
+	decrypt_detail_margin = MarginContainer.new()
+	decrypt_detail_margin.add_theme_constant_override("margin_left", 22)
+	decrypt_detail_margin.add_theme_constant_override("margin_right", 22)
+	decrypt_detail_margin.add_theme_constant_override("margin_top", 18)
+	decrypt_detail_margin.add_theme_constant_override("margin_bottom", 18)
+	detail.add_child(decrypt_detail_margin)
+	_refresh_decrypt_detail()
+
+
+func _refresh_decrypt_detail() -> void:
+	if not is_instance_valid(decrypt_detail_margin):
+		return
+	pending_decrypt_detail_refresh = false
+	current_ai_selector = null
+	ai_menu_open = false
+	guess_input = null
+	_clear(decrypt_detail_margin)
 	if selected_channel >= game.data.channels.size():
 		return
 	var channel: Dictionary = game.data.channels[selected_channel]
 	if not bool(channel.unlocked):
-		_build_locked_channel(detail_margin, selected_channel)
+		_build_locked_channel(decrypt_detail_margin, selected_channel)
 	elif channel.node_ref.is_empty():
-		_build_empty_channel(detail_margin, selected_channel)
+		guess_drafts.erase(selected_channel)
+		_build_empty_channel(decrypt_detail_margin, selected_channel)
 	else:
-		_build_loaded_channel(detail_margin, selected_channel)
+		_build_loaded_channel(decrypt_detail_margin, selected_channel)
 
 
 func _refresh_decrypt_sidebar() -> void:
@@ -532,6 +560,10 @@ func _build_loaded_channel(parent: Control, index: int) -> void:
 			selected_ai_index = option_index
 	ai_select.select(selected_ai_index)
 	ai_select.item_selected.connect(func(option: int) -> void: game.assign_ai(index, ai_select.get_item_metadata(option)))
+	current_ai_selector = ai_select
+	var ai_popup := ai_select.get_popup()
+	ai_popup.about_to_popup.connect(func() -> void: ai_menu_open = true)
+	ai_popup.popup_hide.connect(_on_ai_menu_hidden)
 	controls.add_child(ai_select)
 	controls.add_child(_button("继续" if channel.state == "PAUSED" else "暂停", func() -> void: game.toggle_pause(index), channel.state in ["SOLVED", "FAILED", "ABANDONED"]))
 	var action_text := "放弃节点" if bool(channel.started) else "卸载节点"
@@ -542,6 +574,17 @@ func _build_loaded_channel(parent: Control, index: int) -> void:
 	if int(node.attempt_limit) > 0:
 		var rate_ai: String = channel.ai_id if channel.ai_id != "" else ""
 		controls.add_child(_label("预计成功率 %d%%" % game.current_success_rate(node, rate_ai), 13, C_AMBER))
+
+
+func _on_ai_menu_hidden() -> void:
+	ai_menu_open = false
+	if pending_decrypt_detail_refresh:
+		call_deferred("_flush_pending_decrypt_detail_refresh")
+
+
+func _flush_pending_decrypt_detail_refresh() -> void:
+	if pending_decrypt_detail_refresh and current_page == "decrypt" and not ai_menu_open:
+		_refresh_decrypt_detail()
 
 
 func _metric(title: String, value: String) -> VBoxContainer:

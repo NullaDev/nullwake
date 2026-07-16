@@ -84,6 +84,18 @@ func _run() -> void:
 	main.game.load_inventory(gifted.uid, 0)
 	main.game.assign_ai(0, "filter")
 	_expect(main.game.data.channels[0].state == "AI_THINKING", "unlocked AI should occupy compute and start")
+	var open_ai_selector: OptionButton = main.current_ai_selector
+	_expect(is_instance_valid(open_ai_selector), "loaded channel should expose its AI selector")
+	var ai_popup: PopupMenu = open_ai_selector.get_popup()
+	ai_popup.popup()
+	await process_frame
+	_expect(main.ai_menu_open, "opening the AI selector should suspend asynchronous detail refreshes")
+	main.game.changed.emit("channel:0:settled")
+	_expect(main.current_ai_selector == open_ai_selector and main.ai_menu_open, "channel settlement must not destroy an open AI selector")
+	_expect(main.pending_decrypt_detail_refresh, "a selected-channel refresh should be queued while the AI selector is open")
+	ai_popup.hide()
+	await process_frame
+	_expect(not main.pending_decrypt_detail_refresh and is_instance_valid(main.current_ai_selector), "queued channel detail refresh should run after the AI selector closes")
 	main.game.load_permanent("maintenance", 1)
 	main.selected_channel = 1
 	main._navigate("decrypt")
