@@ -25,6 +25,8 @@ var toast_label: Label
 var toast_timer: Timer
 var export_box: TextEdit
 var guess_input: LineEdit
+var decrypt_sidebar_box: VBoxContainer
+var guess_drafts: Dictionary = {}
 var _last_ai_refresh := 0
 
 
@@ -289,9 +291,21 @@ func _build_current_page() -> void:
 		"settings": _build_settings_page()
 
 
-func _on_game_changed(_reason: String) -> void:
+func _on_game_changed(reason: String) -> void:
 	selected_channel = clampi(selected_channel, 0, game.data.channels.size() - 1)
+	var changed_channel := _channel_from_reason(reason)
+	if current_page == "decrypt" and changed_channel >= 0 and changed_channel != selected_channel:
+		_build_top_bar()
+		_refresh_decrypt_sidebar()
+		return
 	_rebuild_all()
+
+
+func _channel_from_reason(reason: String) -> int:
+	var parts := reason.split(":")
+	if parts.size() >= 3 and parts[0] == "channel":
+		return int(parts[1])
+	return -1
 
 
 func _show_notice(message: String, kind: String) -> void:
@@ -327,36 +341,10 @@ func _build_decrypt_page() -> void:
 	side_margin.add_theme_constant_override("margin_top", 14)
 	side_margin.add_theme_constant_override("margin_bottom", 14)
 	sidebar.add_child(side_margin)
-	var side_box := VBoxContainer.new()
-	side_box.add_theme_constant_override("separation", 8)
-	side_margin.add_child(side_box)
-	side_box.add_child(_label("DECRYPTION CHANNELS", 12, C_CYAN))
-	side_box.add_child(_label("解译通道", 23, C_TEXT))
-	var divider := HSeparator.new()
-	divider.add_theme_color_override("separator", Color("244b50"))
-	side_box.add_child(divider)
-	for index in range(game.data.channels.size()):
-		var channel: Dictionary = game.data.channels[index]
-		var node := game.channel_node(index)
-		var node_name: String = "接口未解锁" if not bool(channel.unlocked) else ("空闲" if node.is_empty() else node.name)
-		var status_color := C_MUTED
-		if bool(channel.unlocked):
-			status_color = _state_color(channel.state)
-		var button := _button("%02d  %s\n     %s" % [index + 1, node_name, _state_name(channel.state)], func() -> void:
-			selected_channel = index
-			_build_current_page()
-		)
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.custom_minimum_size.y = 62
-		button.add_theme_color_override("font_color", status_color if selected_channel == index else C_TEXT)
-		if selected_channel == index:
-			button.add_theme_stylebox_override("normal", _style(Color("122d33"), status_color, 1, 5))
-		side_box.add_child(button)
-	var help := _label("每条通道拥有独立密码、历史和 AI。算力不足时按通道编号排队。", 12, C_MUTED)
-	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	help.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	help.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	side_box.add_child(help)
+	decrypt_sidebar_box = VBoxContainer.new()
+	decrypt_sidebar_box.add_theme_constant_override("separation", 8)
+	side_margin.add_child(decrypt_sidebar_box)
+	_refresh_decrypt_sidebar()
 
 	var detail := _panel(Color("071117"), Color("244b50"), 1)
 	detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -376,6 +364,39 @@ func _build_decrypt_page() -> void:
 		_build_empty_channel(detail_margin, selected_channel)
 	else:
 		_build_loaded_channel(detail_margin, selected_channel)
+
+
+func _refresh_decrypt_sidebar() -> void:
+	if not is_instance_valid(decrypt_sidebar_box):
+		return
+	_clear(decrypt_sidebar_box)
+	decrypt_sidebar_box.add_child(_label("DECRYPTION CHANNELS", 12, C_CYAN))
+	decrypt_sidebar_box.add_child(_label("解译通道", 23, C_TEXT))
+	var divider := HSeparator.new()
+	divider.add_theme_color_override("separator", Color("244b50"))
+	decrypt_sidebar_box.add_child(divider)
+	for index in range(game.data.channels.size()):
+		var channel: Dictionary = game.data.channels[index]
+		var node := game.channel_node(index)
+		var node_name: String = "接口未解锁" if not bool(channel.unlocked) else ("空闲" if node.is_empty() else node.name)
+		var status_color := C_MUTED
+		if bool(channel.unlocked):
+			status_color = _state_color(channel.state)
+		var button := _button("%02d  %s\n     %s" % [index + 1, node_name, _state_name(channel.state)], func() -> void:
+			selected_channel = index
+			_build_current_page()
+		)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.custom_minimum_size.y = 62
+		button.add_theme_color_override("font_color", status_color if selected_channel == index else C_TEXT)
+		if selected_channel == index:
+			button.add_theme_stylebox_override("normal", _style(Color("122d33"), status_color, 1, 5))
+		decrypt_sidebar_box.add_child(button)
+	var help := _label("每条通道拥有独立密码、历史和 AI。算力不足时按通道编号排队。", 12, C_MUTED)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	help.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	help.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	decrypt_sidebar_box.add_child(help)
 
 
 func _build_locked_channel(parent: Control, index: int) -> void:
@@ -545,8 +566,13 @@ func _guess_controls(index: int, node: Dictionary, channel: Dictionary) -> HBoxC
 	guess_input = LineEdit.new()
 	guess_input.max_length = int(node.length)
 	guess_input.placeholder_text = "输入 %d 位协议" % int(node.length)
+	var saved_draft: String = str(guess_drafts.get(index, ""))
+	if saved_draft.length() <= int(node.length):
+		guess_input.text = saved_draft
+		guess_input.caret_column = saved_draft.length()
 	guess_input.custom_minimum_size = Vector2(250, 44)
 	guess_input.editable = channel.ai_id == "" and channel.state not in ["AI_THINKING", "AI_PENDING"]
+	guess_input.text_changed.connect(func(value: String) -> void: guess_drafts[index] = value)
 	guess_input.text_submitted.connect(func(_value: String) -> void: _submit_manual(index))
 	row.add_child(guess_input)
 	for symbol in range(int(node.radix)):
@@ -570,7 +596,13 @@ func _guess_controls(index: int, node: Dictionary, channel: Dictionary) -> HBoxC
 func _submit_manual(index: int) -> void:
 	if guess_input == null:
 		return
-	game.submit_guess(index, guess_input.text, "manual")
+	var draft := guess_input.text
+	guess_drafts.erase(index)
+	if not game.submit_guess(index, draft, "manual"):
+		guess_drafts[index] = draft
+		if is_instance_valid(guess_input):
+			guess_input.text = draft
+			guess_input.caret_column = draft.length()
 
 
 func _history_text(channel: Dictionary, node: Dictionary) -> String:

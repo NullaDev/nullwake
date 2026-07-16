@@ -62,6 +62,7 @@ func _run() -> void:
 	main.game.data.fragments = 50
 	main.game.purchase_terminal_upgrade()
 	main.game.purchase_terminal_upgrade()
+	main.game.purchase_channel()
 	main.game.purchase_compute()
 	main.game.purchase_compute()
 	main.game.purchase_tech("logic_filter")
@@ -69,6 +70,17 @@ func _run() -> void:
 	main.game.load_inventory(gifted.uid, 0)
 	main.game.assign_ai(0, "filter")
 	_expect(main.game.data.channels[0].state == "AI_THINKING", "unlocked AI should occupy compute and start")
+	main.game.load_permanent("maintenance", 1)
+	main.selected_channel = 1
+	main._navigate("decrypt")
+	await process_frame
+	main.guess_input.text = "10"
+	var manual_input: LineEdit = main.guess_input
+	main.game.data.channels[0].ai_due_ms = 1
+	main.game._process_ai()
+	_expect(is_instance_valid(manual_input) and main.guess_input == manual_input and main.guess_input.text == "10", "background AI updates must not rebuild another channel or clear its draft")
+	main.selected_channel = 0
+	main._navigate("decrypt")
 	var energy_before_ai: int = int(main.game.data.energy)
 	for _step in range(10):
 		var channel: Dictionary = main.game.data.channels[0]

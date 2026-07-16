@@ -525,7 +525,7 @@ func submit_guess(channel_index: int, guess: String, operator := "manual") -> bo
 			channel.state = "WAITING_FOR_INPUT" if channel.ai_id == "" else "AI_PENDING"
 	_reschedule_compute()
 	save_now()
-	changed.emit("guess")
+	changed.emit("channel:%d:guess" % channel_index)
 	return true
 
 
@@ -610,7 +610,7 @@ func claim_resolution(channel_index: int) -> void:
 	_consume_or_reset(channel_index, success)
 	if not bool(data.tutorial_completed) and success:
 		_complete_tutorial()
-	_commit("settled")
+	_commit("channel:%d:settled" % channel_index)
 
 
 func _record_node_result(node_id: String, success: bool) -> void:
@@ -765,7 +765,7 @@ func _process_ai() -> void:
 			var guess := AISolver.choose_guess(ai_def.get("strategy", "brute_force"), node, channel.history)
 			if guess == "":
 				_prepare_failure(index)
-				changed.emit("ai_guess")
+				changed.emit("channel:%d:ai_guess" % index)
 			else:
 				submit_guess(index, guess, channel.ai_id)
 			return
