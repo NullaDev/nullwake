@@ -69,6 +69,17 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_expect(is_instance_valid(main.active_scroll) and main.active_scroll.scroll_vertical == catalog_position, "required page rebuilds must restore the previous scroll position")
+	for index in range(30):
+		main.game.data.statistics.node_stats["stress_%02d" % index] = {"solved": index, "failed": 0}
+	main._navigate("stats")
+	await process_frame
+	await process_frame
+	var stats_scroll: ScrollContainer = main.active_scroll
+	_expect(is_instance_valid(stats_scroll) and stats_scroll.get_v_scroll_bar().max_value > stats_scroll.size.y, "long statistics content should use a bounded scroll area")
+	stats_scroll.scroll_vertical = 100
+	await process_frame
+	_expect(stats_scroll.scroll_vertical > 0, "long statistics content should remain vertically scrollable")
+	_expect(main.nav_bar.global_position.y + main.nav_bar.size.y <= main.size.y + 1.0, "statistics content must not push the bottom navigation outside the window")
 	for page in ["nodes", "inventory", "terminal", "tech", "collection", "memory", "stats", "settings", "decrypt"]:
 		main._navigate(page)
 		await process_frame

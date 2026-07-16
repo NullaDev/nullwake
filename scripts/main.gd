@@ -1067,12 +1067,13 @@ func _build_memory_page() -> void:
 
 func _build_stats_page() -> void:
 	var root := _page_scaffold("OPERATION TELEMETRY", "运行统计", "统计包含手动与 AI 操作、节点损耗和收藏进度；它们不会改变游戏数值。")
+	var list := _scroll_list(root)
 	var stats: Dictionary = game.data.statistics
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
-	root.add_child(grid)
+	list.add_child(grid)
 	var values := [
 		["总运行时间", _format_time(float(stats.play_time)), C_CYAN],
 		["总猜测", str(int(stats.guesses)), C_TEXT],
@@ -1103,7 +1104,7 @@ func _build_stats_page() -> void:
 	node_list.bbcode_enabled = true
 	node_list.fit_content = true
 	node_list.text = _node_stats_text(stats.node_stats)
-	root.add_child(node_list)
+	list.add_child(node_list)
 
 
 func _node_stats_text(node_stats: Dictionary) -> String:
