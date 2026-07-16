@@ -55,6 +55,20 @@ func _run() -> void:
 	main.game.data.energy = 100
 	main.game.buy_node("data_packet")
 	_expect(main.game.data.inventory.size() == 1 and int(main.game.data.energy) == 100, "tutorial free grant should block buying the same node while held")
+	main._navigate("nodes")
+	await process_frame
+	await process_frame
+	var catalog_scroll: ScrollContainer = main.active_scroll
+	catalog_scroll.scroll_vertical = 100
+	await process_frame
+	var catalog_position: int = catalog_scroll.scroll_vertical
+	_expect(catalog_position > 0, "node catalog should have a usable vertical scroll range")
+	main.game.changed.emit("channel:0:guess")
+	_expect(main.active_scroll == catalog_scroll and main.active_scroll.scroll_vertical == catalog_position, "background channel updates must not rebuild or reset a scrolled page")
+	main.game.changed.emit("inventory")
+	await process_frame
+	await process_frame
+	_expect(is_instance_valid(main.active_scroll) and main.active_scroll.scroll_vertical == catalog_position, "required page rebuilds must restore the previous scroll position")
 	for page in ["nodes", "inventory", "terminal", "tech", "collection", "memory", "stats", "settings", "decrypt"]:
 		main._navigate(page)
 		await process_frame

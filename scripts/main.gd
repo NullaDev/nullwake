@@ -27,6 +27,8 @@ var export_box: TextEdit
 var guess_input: LineEdit
 var decrypt_sidebar_box: VBoxContainer
 var guess_drafts: Dictionary = {}
+var active_scroll: ScrollContainer
+var page_scroll_positions: Dictionary = {}
 var _last_ai_refresh := 0
 
 
@@ -272,13 +274,17 @@ func _build_navigation() -> void:
 
 
 func _navigate(page: String) -> void:
+	_remember_scroll_position()
+	active_scroll = null
 	current_page = page
 	_build_navigation()
 	_build_current_page()
 
 
 func _build_current_page() -> void:
+	_remember_scroll_position()
 	_clear(content_host)
+	active_scroll = null
 	match current_page:
 		"decrypt": _build_decrypt_page()
 		"nodes": _build_nodes_page()
@@ -294,6 +300,9 @@ func _build_current_page() -> void:
 func _on_game_changed(reason: String) -> void:
 	selected_channel = clampi(selected_channel, 0, game.data.channels.size() - 1)
 	var changed_channel := _channel_from_reason(reason)
+	if changed_channel >= 0 and current_page != "decrypt":
+		_build_top_bar()
+		return
 	if current_page == "decrypt" and changed_channel >= 0 and changed_channel != selected_channel:
 		_build_top_bar()
 		_refresh_decrypt_sidebar()
@@ -699,11 +708,24 @@ func _scroll_list(parent: VBoxContainer) -> VBoxContainer:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(scroll)
+	active_scroll = scroll
+	call_deferred("_restore_scroll_position", current_page, scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 10)
 	scroll.add_child(list)
 	return list
+
+
+func _remember_scroll_position() -> void:
+	if is_instance_valid(active_scroll):
+		page_scroll_positions[current_page] = active_scroll.scroll_vertical
+
+
+func _restore_scroll_position(page: String, scroll: ScrollContainer) -> void:
+	if page != current_page or not is_instance_valid(scroll):
+		return
+	scroll.scroll_vertical = int(page_scroll_positions.get(page, 0))
 
 
 func _build_nodes_page() -> void:
