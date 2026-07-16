@@ -11,6 +11,7 @@ const C_GREEN := Color("75f0a0")
 const C_AMBER := Color("ffc766")
 const C_RED := Color("ff7081")
 const C_VIOLET := Color("b69cff")
+const UI_FONT: FontFile = preload("res://SourceHanSansSC-Regular-2.otf")
 
 var game: GameState
 var current_page := "decrypt"
@@ -110,6 +111,7 @@ func _build_shell() -> void:
 
 func _make_theme() -> Theme:
 	var result := Theme.new()
+	result.default_font = UI_FONT
 	result.default_font_size = 16
 	result.set_color("font_color", "Label", C_TEXT)
 	result.set_color("font_color", "Button", C_TEXT)

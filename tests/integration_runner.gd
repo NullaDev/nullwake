@@ -20,6 +20,8 @@ func _run() -> void:
 	root.add_child(main)
 	await process_frame
 	await process_frame
+	_expect(main.theme.default_font != null, "global UI theme should embed a project font")
+	_expect(main.theme.default_font.has_char(0x89E3), "embedded UI font must contain the Chinese glyph U+89E3")
 	_expect(not main.nav_bar.visible, "bottom navigation must stay hidden during the guided protocol")
 	main.game.start_tutorial()
 	var free_node: Dictionary = main.game.node_definition("maintenance")
