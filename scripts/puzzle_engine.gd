@@ -88,6 +88,14 @@ static func _candidate_matches_rule(candidate: String, node: Dictionary) -> bool
 		for i in range(candidate.length() / 2):
 			if candidate[i] != candidate[candidate.length() - i - 1]:
 				return false
+	if node.get("protocol", "standard") == "checksum":
+		if candidate.length() < 2:
+			return false
+		var checksum := 0
+		for i in range(candidate.length() - 1):
+			checksum += int(candidate[i])
+		if checksum % int(node.get("radix", 2)) != int(candidate[candidate.length() - 1]):
+			return false
 	return true
 
 
@@ -100,13 +108,12 @@ static func generate_secret(node: Dictionary, seed_value: int) -> String:
 	return candidates[rng.randi_range(0, candidates.size() - 1)]
 
 
-static func candidate_consistent(candidate: String, history: Array) -> bool:
+static func candidate_consistent(candidate: String, history: Array, feedback_type := "full") -> bool:
 	for record: Dictionary in history:
 		var expected: Dictionary = record.get("feedback", {})
-		var actual := feedback(candidate, record.get("guess", ""))
+		var actual := visible_feedback(candidate, record.get("guess", ""), feedback_type)
 		if int(expected.get("exact", -1)) >= 0 and actual.exact != int(expected.exact):
 			return false
 		if int(expected.get("misplaced", -1)) >= 0 and actual.misplaced != int(expected.misplaced):
 			return false
 	return true
-

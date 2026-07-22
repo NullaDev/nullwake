@@ -28,6 +28,9 @@ var guess_input: LineEdit
 var decrypt_sidebar_box: VBoxContainer
 var decrypt_detail_margin: MarginContainer
 var current_ai_selector: OptionButton
+var handshake_progress_bar: ProgressBar
+var handshake_progress_label: Label
+var handshake_progress_channel := -1
 var ai_menu_open := false
 var pending_decrypt_detail_refresh := false
 var guess_drafts: Dictionary = {}
@@ -60,6 +63,8 @@ func _process(delta: float) -> void:
 		return
 	game.tick(delta)
 	var now := Time.get_ticks_msec()
+	if current_page == "decrypt":
+		_update_handshake_progress()
 	if current_page == "decrypt" and now - _last_ai_refresh > 500:
 		_last_ai_refresh = now
 		_update_top_values()
@@ -141,6 +146,8 @@ func _make_theme() -> Theme:
 	result.set_stylebox("normal", "TextEdit", _style(Color("071116"), C_CYAN_DIM, 1, 5))
 	result.set_stylebox("focus", "TextEdit", _style(Color("071116"), C_CYAN, 2, 5))
 	result.set_stylebox("normal", "OptionButton", _style(Color("10242b"), C_CYAN_DIM, 1, 5))
+	result.set_stylebox("background", "ProgressBar", _style(Color("071116"), C_CYAN_DIM, 1, 4))
+	result.set_stylebox("fill", "ProgressBar", _style(Color("17635f"), C_CYAN, 1, 4))
 	return result
 
 
@@ -230,6 +237,9 @@ func _build_top_bar() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
 	row.add_child(_status_block("协议能量", str(int(game.data.energy)), C_GREEN))
+	row.add_child(_status_block("周目", "%02d" % int(game.data.get("cycle", 1)), C_TEXT))
+	if int(game.data.get("echo", 0)) > 0:
+		row.add_child(_status_block("零界回声", str(int(game.data.echo)), C_VIOLET))
 	if int(game.data.compute_capacity) > 0 or not game.data.unlocked_ai.is_empty():
 		row.add_child(_status_block("算力", "%d / %d" % [game.used_compute(), int(game.data.compute_capacity)], C_CYAN))
 	if int(game.data.fragments) > 0 or int(game.data.terminal_level) >= 2:
@@ -292,6 +302,9 @@ func _build_current_page() -> void:
 	decrypt_sidebar_box = null
 	decrypt_detail_margin = null
 	current_ai_selector = null
+	handshake_progress_bar = null
+	handshake_progress_label = null
+	handshake_progress_channel = -1
 	ai_menu_open = false
 	pending_decrypt_detail_refresh = false
 	match current_page:
@@ -388,6 +401,9 @@ func _refresh_decrypt_detail() -> void:
 		return
 	pending_decrypt_detail_refresh = false
 	current_ai_selector = null
+	handshake_progress_bar = null
+	handshake_progress_label = null
+	handshake_progress_channel = -1
 	ai_menu_open = false
 	guess_input = null
 	_clear(decrypt_detail_margin)
@@ -429,7 +445,7 @@ func _refresh_decrypt_sidebar() -> void:
 		if selected_channel == index:
 			button.add_theme_stylebox_override("normal", _style(Color("122d33"), status_color, 1, 5))
 		decrypt_sidebar_box.add_child(button)
-	var help := _label("每条通道拥有独立密码、历史和 AI。算力不足时按通道编号排队。", 12, C_MUTED)
+	var help := _label("每条通道拥有独立密码、历史和 AI。算力不足时按玩家设定的优先级排队；已开始的任务不会被抢占。", 12, C_MUTED)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	help.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
@@ -513,6 +529,8 @@ func _build_loaded_channel(parent: Control, index: int) -> void:
 	if channel.ai_id != "":
 		ai_name = game.ai_definition(channel.ai_id).name
 	metrics.add_child(_metric("控制", ai_name))
+	if channel.state == "AI_HANDSHAKE":
+		box.add_child(_handshake_progress(index))
 
 	var log_panel := _panel(Color("03080b"), Color("1d3c40"), 1)
 	log_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -541,6 +559,19 @@ func _build_loaded_channel(parent: Control, index: int) -> void:
 	else:
 		box.add_child(_guess_controls(index, node, channel))
 
+	var unlocked_channels := game.unlocked_channel_count()
+	if unlocked_channels > 1:
+		var schedule := HBoxContainer.new()
+		schedule.add_theme_constant_override("separation", 8)
+		var priority_rank := game.channel_priority_rank(index)
+		schedule.add_child(_label("COMPUTE QUEUE // 算力优先级 %d / %d · 调整后对下一次空闲算力分配生效" % [priority_rank, unlocked_channels], 12, C_MUTED))
+		var schedule_spacer := Control.new()
+		schedule_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		schedule.add_child(schedule_spacer)
+		schedule.add_child(_button("提高优先级", func() -> void: game.move_channel_priority(index, -1), priority_rank <= 1))
+		schedule.add_child(_button("降低优先级", func() -> void: game.move_channel_priority(index, 1), priority_rank >= unlocked_channels))
+		box.add_child(schedule)
+
 	var controls := HBoxContainer.new()
 	controls.add_theme_constant_override("separation", 8)
 	box.add_child(controls)
@@ -568,12 +599,23 @@ func _build_loaded_channel(parent: Control, index: int) -> void:
 	controls.add_child(_button("继续" if channel.state == "PAUSED" else "暂停", func() -> void: game.toggle_pause(index), channel.state in ["SOLVED", "FAILED", "ABANDONED"]))
 	var action_text := "放弃节点" if bool(channel.started) else "卸载节点"
 	controls.add_child(_button(action_text, func() -> void: _request_remove_node(index)))
+	if game.has_tech("auto_restock"):
+		var restock_toggle := CheckButton.new()
+		var restock_covered := game.channel_has_auto_restock(index)
+		restock_toggle.text = "连续采购同类节点" if restock_covered else "连续采购（节点层级未覆盖）"
+		restock_toggle.button_pressed = bool(channel.get("auto_restock", false))
+		restock_toggle.disabled = not restock_covered
+		restock_toggle.tooltip_text = "自动重购 Lv.%d 可覆盖 T-%d 及以下节点。" % [game.tech_level("auto_restock"), game.tech_level("auto_restock")]
+		restock_toggle.toggled.connect(func(enabled: bool) -> void: game.set_channel_auto_restock(index, enabled))
+		controls.add_child(restock_toggle)
 	var control_spacer := Control.new()
 	control_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls.add_child(control_spacer)
 	if int(node.attempt_limit) > 0:
 		var rate_ai: String = channel.ai_id if channel.ai_id != "" else ""
 		controls.add_child(_label("预计成功率 %d%%" % game.current_success_rate(node, rate_ai), 13, C_AMBER))
+	if channel.ai_id != "":
+		controls.add_child(_label("预计完整周期 %.0f 秒" % game.estimated_automation_cycle(node, channel.ai_id), 13, C_CYAN))
 
 
 func _on_ai_menu_hidden() -> void:
@@ -585,6 +627,42 @@ func _on_ai_menu_hidden() -> void:
 func _flush_pending_decrypt_detail_refresh() -> void:
 	if pending_decrypt_detail_refresh and current_page == "decrypt" and not ai_menu_open:
 		_refresh_decrypt_detail()
+
+
+func _handshake_progress(channel_index: int) -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	var row := HBoxContainer.new()
+	row.add_child(_label("PROTOCOL HANDSHAKE / 协议握手", 12, C_CYAN))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	handshake_progress_label = _label("", 12, C_CYAN)
+	row.add_child(handshake_progress_label)
+	box.add_child(row)
+	handshake_progress_bar = ProgressBar.new()
+	handshake_progress_bar.min_value = 0.0
+	handshake_progress_bar.max_value = 100.0
+	handshake_progress_bar.show_percentage = false
+	handshake_progress_bar.custom_minimum_size.y = 18
+	handshake_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(handshake_progress_bar)
+	handshake_progress_channel = channel_index
+	_update_handshake_progress()
+	return box
+
+
+func _update_handshake_progress() -> void:
+	if not is_instance_valid(handshake_progress_bar) or not is_instance_valid(handshake_progress_label):
+		return
+	if handshake_progress_channel < 0 or handshake_progress_channel >= game.data.channels.size():
+		return
+	var channel: Dictionary = game.data.channels[handshake_progress_channel]
+	if channel.get("state", "") != "AI_HANDSHAKE":
+		return
+	var progress := game.ai_handshake_progress(handshake_progress_channel)
+	handshake_progress_bar.value = progress * 100.0
+	handshake_progress_label.text = "%d%% · 剩余 %.1f 秒" % [int(floor(progress * 100.0)), game.ai_handshake_remaining(handshake_progress_channel)]
 
 
 func _metric(title: String, value: String) -> VBoxContainer:
@@ -623,7 +701,7 @@ func _guess_controls(index: int, node: Dictionary, channel: Dictionary) -> HBoxC
 		guess_input.text = saved_draft
 		guess_input.caret_column = saved_draft.length()
 	guess_input.custom_minimum_size = Vector2(250, 44)
-	guess_input.editable = channel.ai_id == "" and channel.state not in ["AI_THINKING", "AI_PENDING"]
+	guess_input.editable = channel.ai_id == "" and channel.state not in ["AI_HANDSHAKE", "AI_THINKING", "AI_PENDING"]
 	guess_input.text_changed.connect(func(value: String) -> void: guess_drafts[index] = value)
 	guess_input.text_submitted.connect(func(_value: String) -> void: _submit_manual(index))
 	row.add_child(guess_input)
@@ -639,7 +717,9 @@ func _guess_controls(index: int, node: Dictionary, channel: Dictionary) -> HBoxC
 	row.add_child(_button("清除", func() -> void: guess_input.clear(), not guess_input.editable))
 	row.add_child(_button("提交猜测", func() -> void: _submit_manual(index), not guess_input.editable))
 	if channel.state == "AI_PENDING":
-		row.add_child(_label("等待可用算力…", 14, C_AMBER))
+		row.add_child(_label("等待可用算力…（优先级 %d/%d）" % [game.channel_priority_rank(index), game.unlocked_channel_count()], 14, C_AMBER))
+	elif channel.state == "AI_HANDSHAKE":
+		row.add_child(_label("正在建立协议连接…", 14, C_CYAN))
 	elif channel.state == "AI_THINKING":
 		row.add_child(_label("AI 正在推演候选空间…", 14, C_CYAN))
 	return row
@@ -661,22 +741,34 @@ func _history_text(channel: Dictionary, node: Dictionary) -> String:
 	var lines: Array[String] = []
 	lines.append("[color=#2d8d8a]> LINK %s / %d-SYMBOL RADIX-%d[/color]" % [node.code, int(node.length), int(node.radix)])
 	var in_tutorial := not bool(game.data.tutorial_completed)
+	var automation_hint: bool = bool(game.data.tutorial_completed) and game.data.get("tutorial_step", "") == "automation_hint"
 	var tutorial: Dictionary = game.config.data.get("tutorial", {})
+	if automation_hint:
+		lines.append("")
+		lines.append("[color=#ffc766]// NEXT OBJECTIVE / 自动化起步[/color]")
+		lines.append("[color=#d1e8e7]%s[/color]" % tutorial.get("automation_prompt", "积累 36 E 后前往 04 终端购买算力。"))
+		lines.append("")
 	if channel.history.is_empty():
 		if in_tutorial:
 			var first_target: String = tutorial.get("first_guess", "100")
 			lines.append("[color=#75f0a0]! GUIDE INPUT  >  %s[/color]" % "  ".join(first_target.split("")))
+		elif automation_hint:
+			pass
 		else:
 			lines.append("[color=#71908f]< NO HANDSHAKE DATA[/color]")
 			lines.append("[color=#62f4e8]> _[/color]")
 	else:
 		for record: Dictionary in channel.history:
 			var feedback: Dictionary = record.feedback
-			var exact_text := "?" if int(feedback.exact) < 0 else str(int(feedback.exact))
-			var misplaced_text := "?" if int(feedback.misplaced) < 0 else str(int(feedback.misplaced))
 			var actor := "MAN" if record.operator == "manual" else "AI"
 			lines.append("[color=#d1e8e7]> %s[/color]  [color=#71908f][%s][/color]" % [record.guess, actor])
-			lines.append("[color=#75f0a0]< 位置正确:%s  数字错位:%s[/color]" % [exact_text, misplaced_text])
+			match node.get("feedback", "full"):
+				"total_only":
+					lines.append("[color=#75f0a0]< 数字命中:%d[/color]" % int(feedback.misplaced))
+				"exact_only":
+					lines.append("[color=#75f0a0]< 位置正确:%d[/color]" % int(feedback.exact))
+				_:
+					lines.append("[color=#75f0a0]< 位置正确:%d  数字错位:%d[/color]" % [int(feedback.exact), int(feedback.misplaced)])
 		if in_tutorial and channel.history.size() == 1 and game.data.tutorial_step == "solve_hint":
 			lines.append("")
 			lines.append("[color=#ffc766]// FEEDBACK EXPLANATION / 本次教学仅显示一次[/color]")
@@ -688,6 +780,16 @@ func _history_text(channel: Dictionary, node: Dictionary) -> String:
 			lines.append("")
 			lines.append("[color=#75f0a0]* PROTOCOL VERIFIED / 协议验证成功[/color]")
 			lines.append("[color=#ffc766]! GUIDE  >  %s[/color]" % tutorial.get("claim_prompt", "请点击“结算并继续”领取奖励。"))
+	if channel.state == "AI_HANDSHAKE":
+		lines.append("")
+		lines.append("[color=#62f4e8]> 协议握手中。完成后 AI 才会开始猜测。[/color]")
+	elif channel.state == "AI_THINKING":
+		lines.append("")
+		lines.append("[color=#75f0a0]< 协议握手完成。[/color]")
+		lines.append("[color=#62f4e8]> AI 正在猜测中，请稍候。[/color]")
+	elif channel.state == "AI_PENDING":
+		lines.append("")
+		lines.append("[color=#ffc766]> AI 正在等待可用算力。[/color]")
 	if bool(channel.started) and node.ownership != "permanent":
 		lines.append("[color=#ffc766]! NODE LOCKED / 结算前不可移出[/color]")
 	return "\n".join(lines)
@@ -696,7 +798,7 @@ func _history_text(channel: Dictionary, node: Dictionary) -> String:
 func _state_name(state: String) -> String:
 	return {
 		"LOCKED": "未解锁", "EMPTY": "空闲", "READY": "等待输入", "WAITING_FOR_INPUT": "等待输入",
-		"AI_PENDING": "算力排队", "AI_THINKING": "AI 运行中", "RESOLVING_GUESS": "校验中",
+		"AI_PENDING": "算力排队", "AI_HANDSHAKE": "协议握手", "AI_THINKING": "AI 解题中", "RESOLVING_GUESS": "校验中",
 		"SOLVED": "已破解", "FAILED": "失败", "ABANDONED": "已放弃", "PAUSED": "已暂停"
 	}.get(state, state)
 
@@ -708,7 +810,7 @@ func _state_color(state: String) -> Color:
 		return C_RED
 	if state in ["AI_PENDING", "PAUSED"]:
 		return C_AMBER
-	if state == "AI_THINKING":
+	if state in ["AI_HANDSHAKE", "AI_THINKING"]:
 		return C_CYAN
 	return C_MUTED
 
@@ -722,14 +824,31 @@ func _ownership_name(node: Dictionary) -> String:
 	return "一次性消耗"
 
 
+func _protocol_name(protocol: String) -> String:
+	return {
+		"standard": "标准规则", "no_repeat": "无重复规则",
+		"mirror": "镜像约束", "checksum": "校验位约束"
+	}.get(protocol, protocol)
+
+
+func _feedback_name(feedback: String) -> String:
+	return {
+		"full": "完整反馈", "total_only": "仅报命中总量", "exact_only": "仅报正确位置"
+	}.get(feedback, feedback)
+
+
 func _request_remove_node(index: int) -> void:
 	var channel: Dictionary = game.data.channels[index]
 	if not bool(channel.started):
 		game.unload_node(index)
 		return
 	var dialog := ConfirmationDialog.new()
-	dialog.title = "确认销毁已启动节点"
-	dialog.dialog_text = "该节点已经启动。放弃后将无法恢复，也不会返还购买费用。"
+	if game.is_channel_free_grant(index):
+		dialog.title = "确认放弃教学节点"
+		dialog.dialog_text = "放弃后将清空当前猜测进度，并把教学赠送节点退回库存。"
+	else:
+		dialog.title = "确认销毁已启动节点"
+		dialog.dialog_text = "该节点已经启动。放弃后将无法恢复，也不会返还购买费用。"
 	dialog.ok_button_text = "确认放弃"
 	dialog.cancel_button_text = "继续破解"
 	dialog.confirmed.connect(func() -> void: game.abandon_node(index))
@@ -796,16 +915,20 @@ func _node_catalog_card(node: Dictionary) -> PanelContainer:
 	heading.add_child(_label("  %s" % node.code, 12, C_CYAN_DIM))
 	heading.add_child(_label("  [%s风险]" % node.risk, 12, C_RED if node.risk == "异常" else (C_AMBER if node.risk == "高" else C_MUTED)))
 	main.add_child(heading)
-	var tags := "%s · %d位%d进制 · %s · %s" % [
-		_ownership_name(node), int(node.length), int(node.radix),
+	var tags := "%s · %s · %d位%d进制 · %s · %s" % [
+		node.get("family", "标准协议"), _ownership_name(node), int(node.length), int(node.radix),
 		"无限尝试" if int(node.attempt_limit) == 0 else "%d 次尝试" % int(node.attempt_limit),
 		"允许重复" if bool(node.allow_duplicates) else "禁止重复"
 	]
 	main.add_child(_label(tags, 13, C_CYAN_DIM))
+	main.add_child(_label("%s · %s" % [_protocol_name(node.get("protocol", "standard")), _feedback_name(node.get("feedback", "full"))], 12, C_MUTED))
 	var description := _label(node.description, 14, C_MUTED)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	main.add_child(description)
-	var details := "推荐 AI：%s  ·  成功奖励：%d E" % [game.ai_definition(node.recommended_ai).get("name", "手动"), int(node.reward)]
+	var details := "推荐 AI：%s  ·  成功奖励：%d E  ·  按当前科技预计自动周期：%.0f 秒" % [
+		game.ai_definition(node.recommended_ai).get("name", "手动"), int(node.reward),
+		game.estimated_automation_cycle(node, node.recommended_ai)
+	]
 	if game.has_tech("risk_analysis") or int(game.data.terminal_level) >= 3:
 		details += "  ·  基准：平均 %.1f / 最坏 %d  ·  %s" % [float(node.benchmark.average), int(node.benchmark.worst), node.benchmark.solver]
 	main.add_child(_label(details, 12, C_MUTED))
@@ -821,10 +944,9 @@ func _node_catalog_card(node: Dictionary) -> PanelContainer:
 		, not compatible))
 	else:
 		var unique_owned: bool = node.ownership == "unique" and (node.id in game.data.unique_completed or game._owns_node_type(node.id))
-		var free_grant_owned: bool = game.has_free_grant(node.id)
 		action.add_child(_label("%d E" % int(node.cost), 21, C_GREEN))
-		var button_text := "已取得" if unique_owned else ("先使用免费节点" if free_grant_owned else "购买节点")
-		action.add_child(_button(button_text, func() -> void: game.buy_node(node.id), unique_owned or free_grant_owned))
+		var button_text := "已取得" if unique_owned else "购买节点"
+		action.add_child(_button(button_text, func() -> void: game.buy_node(node.id), unique_owned))
 		if not compatible:
 			action.add_child(_label("需终端 T-%d" % int(node.terminal_level), 12, C_AMBER))
 	return card
@@ -896,7 +1018,7 @@ func _build_terminal_page() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 12)
 	columns.add_child(right)
-	var compute := _info_card("COMPUTE CAPACITY", "算力矩阵", "总算力 %d · 已占用 %d · 可用 %d\n扩容后按通道优先级自动唤醒等待中的 AI。" % [int(game.data.compute_capacity), game.used_compute(), game.available_compute()], C_VIOLET)
+	var compute := _info_card("COMPUTE CAPACITY", "算力矩阵", "总算力 %d · 已占用 %d · 可用 %d\n等待中的 AI 按可调优先级唤醒；运行中的握手与推演不会被抢占。" % [int(game.data.compute_capacity), game.used_compute(), game.available_compute()], C_VIOLET)
 	compute.get_child(0).add_child(_button("购买 +%d 算力 · %d E" % [int(game.config.data.economy.compute_purchase_amount), game.next_compute_cost()], game.purchase_compute))
 	right.add_child(compute)
 	var unlocked := game.unlocked_channel_count()
@@ -905,6 +1027,16 @@ func _build_terminal_page() -> void:
 	var channel_card := _info_card("CHANNEL ARRAY", "解译通道阵列", "已建立 %d / %d 条通道。通道增加不会自动增加算力。" % [unlocked, int(current.max_channels)], C_GREEN)
 	channel_card.get_child(0).add_child(_button("建立下一通道 · %d E" % channel_cost, game.purchase_channel, unlocked >= int(current.max_channels)))
 	right.add_child(channel_card)
+	var target_score := game.prestige_target_score()
+	var score := int(game.data.get("run_score", 0))
+	var next_score := game.next_prestige_echo_score()
+	var prestige_body := "周目分数 %d / %d · 记忆核心：%s\n现在回溯可获得 %d 回声 · 下一点还需 %d 分\n历史回声倍率 ×%.2f" % [
+		score, target_score, "已完成" if bool(game.data.get("cycle_memory_core_solved", false)) else "未完成",
+		game.preview_prestige_echo(), maxi(0, next_score - score), game.prestige_multiplier()
+	]
+	var prestige_card := _info_card("NULL REVERSION", "零界回溯", prestige_body, C_VIOLET)
+	prestige_card.get_child(0).add_child(_button("进入下一周目", _confirm_prestige, not game.can_prestige()))
+	right.add_child(prestige_card)
 
 
 func _info_card(kicker: String, title: String, body: String, accent: Color) -> PanelContainer:
@@ -927,7 +1059,13 @@ func _yes_no(value: bool) -> String:
 
 
 func _build_tech_page() -> void:
-	var root := _page_scaffold("RESEARCH MATRIX", "科技研究", "研究同时消耗协议能量与稀有的计算碎片。前置条件和终端要求必须全部满足。")
+	var root := _page_scaffold("RESEARCH MATRIX", "科技研究", "多数功能与专用优化为一次性研究；自动结算与通用产能科技可重复升级，并在零界回溯时重置。")
+	var bulk_toggle := CheckButton.new()
+	bulk_toggle.name = "BulkTechPurchase"
+	bulk_toggle.text = "批量研究：一次购买当前资源可承担的全部等级"
+	bulk_toggle.button_pressed = bool(game.data.settings.get("bulk_tech_purchase", false))
+	bulk_toggle.toggled.connect(func(enabled: bool) -> void: game.set_bulk_tech_purchase(enabled))
+	root.add_child(bulk_toggle)
 	var list := _scroll_list(root)
 	var branches := ["自动化", "AI", "经济", "战利品", "终端"]
 	for branch in branches:
@@ -948,48 +1086,90 @@ func _build_tech_page() -> void:
 
 
 func _tech_card(definition: Dictionary) -> PanelContainer:
-	var purchased := game.has_tech(definition.id)
+	var level := game.tech_level(definition.id)
+	var maximum := game.tech_max_level(definition.id)
+	var current_cap := game.tech_level_cap(definition.id)
+	var maxed := game.is_tech_maxed(definition.id)
+	var progression_capped := current_cap > 0 and level >= current_cap and not maxed
 	var available := int(game.data.terminal_level) >= int(definition.terminal_level)
 	for requirement in definition.requires:
 		available = available and game.has_tech(requirement)
-	var accent := C_GREEN if purchased else (C_CYAN_DIM if available else Color("3a4245"))
+	var accent := C_GREEN if maxed else (C_VIOLET if level > 0 else (C_CYAN_DIM if available else Color("3a4245")))
 	var card := _panel(C_PANEL, accent, 1)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var box := VBoxContainer.new()
-	box.custom_minimum_size.y = 132
+	box.custom_minimum_size.y = 154
 	box.add_theme_constant_override("separation", 5)
 	card.add_child(box)
 	var header := HBoxContainer.new()
-	header.add_child(_label(definition.name, 18, C_GREEN if purchased else C_TEXT))
+	header.add_child(_label(definition.name, 18, C_GREEN if maxed else (C_VIOLET if level > 0 else C_TEXT)))
 	var header_spacer := Control.new()
 	header_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(header_spacer)
-	header.add_child(_label("已完成" if purchased else "T-%d" % int(definition.terminal_level), 12, C_GREEN if purchased else C_MUTED))
+	var level_text := ("已完成" if maxed else "未研究") if maximum == 1 else ("当前等级：%d / ∞" % level if maximum < 0 else "当前等级：%d / %d" % [level, maximum])
+	header.add_child(_label(level_text, 12, C_GREEN if maxed else (C_VIOLET if level > 0 else C_MUTED)))
 	box.add_child(header)
 	var description := _label(definition.description, 13, C_MUTED)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(description)
-	var requirements := "成本 %d E + %d 碎片" % [int(definition.energy_cost), int(definition.fragment_cost)]
+	if maximum != 1:
+		box.add_child(_label("当前提升：%s" % _tech_current_effect_text(definition, level), 12, C_CYAN if level == 0 else C_GREEN))
+	var bulk_enabled := bool(game.data.settings.get("bulk_tech_purchase", false)) and maximum != 1
+	var preview := game.tech_purchase_preview(definition.id, bulk_enabled)
+	var cap_requirement := "升级终端后可继续提升" if bool(definition.get("level_cap_by_terminal", false)) else "建立更多通道后可继续提升"
+	var requirements := "已达到等级上限" if maxed else (cap_requirement if progression_capped else "下一级 %d E + %d 碎片" % [int(game.next_tech_cost(definition.id).energy), int(game.next_tech_cost(definition.id).fragments)])
+	if bulk_enabled and not maxed and not progression_capped:
+		requirements = "当前资源可提升 %d 级 · 合计 %d E + %d 碎片" % [int(preview.levels), int(preview.energy), int(preview.fragments)]
+	if int(game.data.terminal_level) < int(definition.terminal_level):
+		requirements += " · 需要 T-%d 终端" % int(definition.terminal_level)
 	if not definition.requires.is_empty():
 		var names: Array[String] = []
 		for requirement in definition.requires:
 			names.append(game.config.tech[requirement].name)
-		requirements += " · 前置：" + " / ".join(names)
+			requirements += " · 前置：" + " / ".join(names)
 	box.add_child(_label(requirements, 11, C_MUTED))
-	box.add_child(_button("研究完成" if purchased else "开始研究", func() -> void: game.purchase_tech(definition.id), purchased or not available))
+	var action := "研究完成" if maxed else ("开始研究" if maximum == 1 else ("提升 %d 级" % int(preview.levels) if bulk_enabled else "提升一级"))
+	box.add_child(_button(action, func() -> void: game.purchase_tech(definition.id), maxed or progression_capped or not available or (bulk_enabled and int(preview.levels) <= 0)))
 	return card
 
 
+func _tech_current_effect_text(definition: Dictionary, level: int) -> String:
+	var display: Dictionary = definition.get("level_display", {})
+	if display.is_empty():
+		return "随等级生效"
+	var label: String = display.get("label", "效果")
+	var value := float(display.get("value", 0.0)) * level
+	match display.get("format", "bonus_percent"):
+		"reduction_percent":
+			return "%s -%s%%" % [label, _compact_number(value * 100.0)]
+		"channels":
+			return "%s %d 条通道" % [label, int(round(value))]
+		"tiers":
+			return "%s尚未覆盖节点" % label if level <= 0 else "%s至 T-%d 节点" % [label, int(round(value))]
+		_:
+			return "%s +%s%%" % [label, _compact_number(value * 100.0)]
+
+
+func _compact_number(value: float) -> String:
+	return "%d" % int(round(value)) if is_equal_approx(value, round(value)) else "%.1f" % value
+
+
 func _build_collection_page() -> void:
-	var root := _page_scaffold("RECOVERED ARTIFACTS", "战利品收藏", "首次获得会登记图鉴；重复品可分解为计算碎片，唯一物品永远不会自动分解。")
+	var root := _page_scaffold("RECOVERED ARTIFACTS", "战利品收藏", "每件收藏都有永久被动；凑齐系列后，该系列全部单件效果翻倍。重复品可分解为计算碎片。")
 	var summary := HBoxContainer.new()
 	summary.add_theme_constant_override("separation", 10)
-	summary.add_child(_label("已发现 %d / %d" % [game.collected_unique_count(), game.config.loot.size()], 15, C_GREEN))
-	summary.add_child(_label("系列完成 %d / %d" % [game.data.claimed_series.size(), game.config.series.size()], 15, C_VIOLET))
+	summary.add_child(_label("已发现 %d / %d" % [game.visible_collected_count(), game.visible_loot_count()], 15, C_GREEN))
+	var visible_claimed := 0
+	for series_id in game.data.claimed_series:
+		if game.is_series_visible(game.config.series.get(series_id, {})):
+			visible_claimed += 1
+	summary.add_child(_label("系列完成 %d / %d" % [visible_claimed, game.visible_series_count()], 15, C_VIOLET))
 	root.add_child(summary)
 	var list := _scroll_list(root)
 	for series_def: Dictionary in game.config.data.series:
+		if not game.is_series_visible(series_def):
+			continue
 		var items: Array[Dictionary] = []
 		for item_def: Dictionary in game.config.data.loot:
 			if item_def.series == series_def.id:
@@ -1007,8 +1187,10 @@ func _build_collection_page() -> void:
 		var series_spacer := Control.new()
 		series_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		series_head.add_child(series_spacer)
-		series_head.add_child(_label("%d / %d · 系列奖励 %d 碎片" % [found, items.size(), int(series_def.reward_fragments)], 13, C_GREEN if found == items.size() else C_MUTED))
+		series_head.add_child(_label("%d / %d · 齐套单件效果 ×%.0f · 奖励 %d 碎片" % [found, items.size(), float(series_def.get("completed_effect_multiplier", 2.0)), int(series_def.reward_fragments)], 13, C_GREEN if found == items.size() else C_MUTED))
 		series_box.add_child(series_head)
+		series_box.add_child(_label("系列规则：单件取得后立即生效 · 集齐后下列所有持有效果 ×%.0f" % float(series_def.get("completed_effect_multiplier", 2.0)), 12, C_GREEN if found == items.size() else C_CYAN))
+		series_box.add_child(_label("来源：%s" % series_def.get("source_text", "尚未定位"), 12, C_AMBER))
 		var item_row := HBoxContainer.new()
 		item_row.add_theme_constant_override("separation", 8)
 		series_box.add_child(item_row)
@@ -1023,10 +1205,18 @@ func _loot_item_card(item: Dictionary) -> PanelContainer:
 	var card := _panel(Color("071117"), _rarity_color(item.rarity) if found else Color("26353a"), 1)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(230, 115)
+	box.custom_minimum_size = Vector2(230, 180)
 	card.add_child(box)
 	box.add_child(_label(item.name if found else "[ 未识别轮廓 ]", 15, _rarity_color(item.rarity) if found else C_MUTED))
 	box.add_child(_label(item.rarity if found else "???", 11, C_MUTED))
+	var series_complete: bool = item.get("series", "") in game.data.claimed_series
+	var effect := _label("持有效果：%s" % item.get("effect_text", "无"), 13, C_GREEN if found else C_CYAN)
+	effect.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	effect.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	effect.custom_minimum_size.y = 38
+	box.add_child(effect)
+	var set_status: String = "套装状态：已集齐，本效果已 ×2" if series_complete else "套装状态：未集齐；集齐后本效果 ×2"
+	box.add_child(_label(set_status, 11, C_VIOLET if series_complete else C_MUTED))
 	var description := _label(item.description if found else "数据未登记。相关节点的战利品信号仍然模糊。", 12, C_MUTED)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1045,22 +1235,27 @@ func _rarity_color(rarity: String) -> Color:
 
 
 func _build_memory_page() -> void:
-	var root := _page_scaffold("MEMORY ARCHIVE", "记忆档案", "记忆片段不会被消耗。部分记录可能在后续发现中获得不同解释。")
+	var root := _page_scaffold("MEMORY ARCHIVE", "记忆档案", "已解锁记录会显示完整内容；未解锁记录仍会列出开启条件。记忆片段不会被消耗。")
 	var list := _scroll_list(root)
-	if game.data.memories.is_empty():
-		list.add_child(_info_card("ARCHIVE EMPTY", "没有可读取的记忆", "继续破解特殊节点、升级终端或完成收藏系列。", C_MUTED))
-		return
-	for memory_id in game.data.memories:
-		var memory: Dictionary = game.config.memories.get(memory_id, {})
-		if memory.is_empty():
-			continue
-		var card := _panel(C_PANEL, C_VIOLET.darkened(0.3), 1)
+	for memory: Dictionary in game.config.data.get("memories", []):
+		var unlocked: bool = memory.id in game.data.memories
+		var card := _panel(C_PANEL, C_VIOLET.darkened(0.3) if unlocked else Color("26353a"), 1)
+		card.custom_minimum_size.y = 90 if unlocked else 70
 		var box := VBoxContainer.new()
 		box.add_theme_constant_override("separation", 7)
 		card.add_child(box)
-		box.add_child(_label(memory.title, 18, C_VIOLET))
-		var text := _label(memory.text, 15, C_TEXT)
-		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(_label(memory.title, 18, C_VIOLET if unlocked else C_MUTED))
+		var body: String = memory.text if unlocked else "[ 尚未解锁 ]  %s" % memory.get("unlock_hint", "继续探索设施")
+		var text := RichTextLabel.new()
+		text.name = "MemoryBody_%s" % memory.id
+		text.bbcode_enabled = false
+		text.fit_content = true
+		text.scroll_active = false
+		text.text = body
+		text.custom_minimum_size.y = 44 if unlocked else 24
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text.add_theme_font_size_override("normal_font_size", 15)
+		text.add_theme_color_override("default_color", C_TEXT if unlocked else C_MUTED)
 		box.add_child(text)
 		list.add_child(card)
 
@@ -1070,7 +1265,9 @@ func _build_stats_page() -> void:
 	var list := _scroll_list(root)
 	var stats: Dictionary = game.data.statistics
 	var grid := GridContainer.new()
+	grid.name = "StatsGrid"
 	grid.columns = 4
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	list.add_child(grid)
@@ -1092,12 +1289,25 @@ func _build_stats_page() -> void:
 		["重复品分解", str(int(stats.duplicates_dismantled)), C_TEXT],
 		["解译通道", str(game.unlocked_channel_count()), C_CYAN]
 	]
-	for item: Array in values:
+	for index in range(values.size()):
+		var item: Array = values[index]
 		var card := _panel(C_PANEL, Color("244b50"), 1)
-		card.custom_minimum_size.y = 80
+		card.name = "StatsCard_%02d" % index
+		card.custom_minimum_size = Vector2(200, 88)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var box := VBoxContainer.new()
-		box.add_child(_label(item[0], 11, C_MUTED))
-		box.add_child(_label(item[1], 22, item[2]))
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		var title := _label(str(item[0]), 11, C_MUTED)
+		title.name = "StatsTitle"
+		title.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.add_child(title)
+		var value := _label(str(item[1]), 22, item[2])
+		value.name = "StatsValue"
+		value.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.add_child(value)
 		card.add_child(box)
 		grid.add_child(card)
 	var node_list := RichTextLabel.new()
@@ -1138,13 +1348,10 @@ func _build_settings_page() -> void:
 	pref_box.add_child(_label("INTERFACE / AUTOMATION", 12, C_CYAN))
 	pref_box.add_child(_label("运行偏好", 21, C_TEXT))
 	var dismantle := CheckButton.new()
-	dismantle.text = "重复战利品自动分解"
-	dismantle.button_pressed = bool(game.data.settings.auto_dismantle)
-	dismantle.disabled = not game.has_tech("auto_dismantle")
-	dismantle.toggled.connect(func(value: bool) -> void: game.set_setting("auto_dismantle", value))
+	dismantle.text = "重复战利品自动分解（固定规则）"
+	dismantle.button_pressed = true
+	dismantle.disabled = true
 	pref_box.add_child(dismantle)
-	if dismantle.disabled:
-		pref_box.add_child(_label("需要研究“重复品自动分解”。", 11, C_MUTED))
 	var motion := CheckButton.new()
 	motion.text = "减少界面动态效果"
 	motion.button_pressed = bool(game.data.settings.reduced_motion)
@@ -1215,6 +1422,27 @@ func _confirm_reset() -> void:
 	dialog.close_requested.connect(dialog.queue_free)
 	add_child(dialog)
 	dialog.popup_centered(Vector2i(500, 190))
+
+
+func _confirm_prestige() -> void:
+	var echo_gain := game.preview_prestige_echo()
+	var next_multiplier := 1.0 + float(game.config.data.get("prestige", {}).get("multiplier_coefficient", 0.20)) * pow(
+		float(int(game.data.get("lifetime_echo", 0)) + echo_gain),
+		float(game.config.data.get("prestige", {}).get("multiplier_exponent", 0.85))
+	)
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "确认零界回溯"
+	dialog.dialog_text = "将进入第 %d 周目并获得 %d 零界回声，永久能量倍率变为 ×%.2f。\n\n终端、能量、碎片、算力、通道、库存和局内科技会重置；收藏、套装、保底、记忆与终身统计会保留。" % [int(game.data.get("cycle", 1)) + 1, echo_gain, next_multiplier]
+	dialog.ok_button_text = "确认回溯"
+	dialog.cancel_button_text = "继续当前周目"
+	dialog.confirmed.connect(func() -> void:
+		current_page = "decrypt"
+		selected_channel = 0
+		game.prestige()
+	)
+	dialog.close_requested.connect(dialog.queue_free)
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(620, 250))
 
 
 func _show_awakening() -> void:

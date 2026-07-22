@@ -1,110 +1,303 @@
 {
-  "config_version": "0.3.0",
+  "config_version": "0.6.5",
   "seed": 731947,
+  "balance": {
+    "manual_reward_bonus": 0.0,
+    "manual_active_bonus_cap": 0.75,
+    "major_upgrade_cost_growth": 2.15,
+    "same_run_production_growth_target": 1.45,
+    "minimum_automation_cycle_ratio": 0.20
+  },
   "economy": {
-    "compute_base_cost": 15,
-    "compute_cost_growth": 6,
+    "compute_base_cost": 36,
+    "compute_cost_multiplier": 1.75,
     "compute_purchase_amount": 2,
-    "channel_costs": [0, 65, 180, 420],
+    "channel_costs": [0, 560, 5000, 18000],
     "resale_ratio": 0.5
+  },
+  "prestige": {
+    "unlock_terminal_level": 4,
+    "unlock_run_score": 24000,
+    "run_score_targets": [24000, 52000, 100000],
+    "later_score_multiplier": 1.8,
+    "score_divisor": 800,
+    "multiplier_coefficient": 0.20,
+    "multiplier_exponent": 0.85
+  },
+  "offline": {
+    "enabled": false,
+    "efficiency": 0.70,
+    "cap_hours": 8
   },
   "tutorial": {
     "title": "紧急唤醒",
     "fixed_secret": "001",
     "first_guess": "100",
     "solution_guess": "001",
+    "first_collection": "pod_seal",
     "first_prompt": "该协议由三个数字组成，每一位只能是 0 或 1。请按照下方目标完成第一次输入。",
     "solve_prompt": "已收到反馈。请阅读 DOS 通讯记录中的一次性说明，再按照新的输入目标继续。",
     "claim_prompt": "协议破解成功。请点击“结算并继续”领取协议能量。",
+    "automation_prompt": "下一目标：先使用赠送的常规数据封装积累到 36 E，再前往“04 终端”购买第一组算力。购买算力会解锁序列探针，使节点能够由 AI 自动猜测。",
     "exact_explanation": "位置正确 1：有 1 个数字及其所在位置完全正确。",
     "misplaced_explanation": "数字错位 2：另有 2 个数字存在，但它们的位置不正确。",
     "story": "休眠舱外一片黑暗。没有检测到其他清醒生命。\n\n损坏的生命维持系统正在耗尽最后一份储备。观察窗外，一座没有推进装置的巨大设施在深空缓慢漂流。\n\n唯一仍有回应的设备，是一个终端。"
   },
   "terminal_levels": [
     {"level": 1, "name": "应急终端", "energy_cost": 0, "fragment_cost": 0, "max_length": 4, "max_radix": 2, "limited_protocols": false, "special_protocols": false, "max_channels": 1, "region": "苏醒室"},
-    {"level": 2, "name": "维护环终端", "energy_cost": 40, "fragment_cost": 0, "max_length": 4, "max_radix": 2, "limited_protocols": true, "special_protocols": false, "max_channels": 2, "region": "维护环"},
-    {"level": 3, "name": "棱镜解译终端", "energy_cost": 140, "fragment_cost": 5, "max_length": 5, "max_radix": 3, "limited_protocols": true, "special_protocols": true, "max_channels": 3, "region": "棱镜档案层"},
-    {"level": 4, "name": "零界核心终端", "energy_cost": 420, "fragment_cost": 15, "max_length": 6, "max_radix": 4, "limited_protocols": true, "special_protocols": true, "max_channels": 4, "region": "零界核心"}
+    {"level": 2, "name": "维护环终端", "energy_cost": 135, "fragment_cost": 0, "max_length": 7, "max_radix": 6, "limited_protocols": true, "special_protocols": false, "max_channels": 2, "region": "维护环"},
+    {"level": 3, "name": "棱镜解译终端", "energy_cost": 1100, "fragment_cost": 8, "max_length": 8, "max_radix": 8, "limited_protocols": true, "special_protocols": true, "max_channels": 3, "region": "棱镜档案层"},
+    {"level": 4, "name": "零界核心终端", "energy_cost": 10500, "fragment_cost": 35, "max_length": 10, "max_radix": 10, "limited_protocols": true, "special_protocols": true, "max_channels": 4, "region": "零界核心"}
   ],
   "ai_definitions": [
-    {"id": "probe", "name": "序列探针", "description": "依次遍历所有组合；不会分析反馈，不能处理限步协议。", "strategy": "brute_force", "compute_cost": 2, "think_time": 1.2, "terminal_level": 1, "supports_limits": false},
-    {"id": "filter", "name": "逻辑筛选器", "description": "根据全部反馈排除矛盾候选，适合常规限步协议。", "strategy": "elimination", "compute_cost": 4, "think_time": 1.6, "terminal_level": 2, "supports_limits": true},
-    {"id": "entropy", "name": "熵减核心", "description": "模拟反馈划分并选择信息量更高的探测猜测。", "strategy": "information_gain", "compute_cost": 7, "think_time": 2.1, "terminal_level": 3, "supports_limits": true}
+    {"id": "probe", "name": "序列探针", "description": "单步最快，依次遍历所有组合；不会分析反馈，不能处理限步协议。", "strategy": "brute_force", "compute_cost": 2, "decision_time": 1.0, "terminal_level": 1, "supports_limits": false},
+    {"id": "filter", "name": "逻辑筛选器", "description": "根据全部可见反馈排除矛盾候选，单位时间产出稳定。", "strategy": "elimination", "compute_cost": 4, "decision_time": 1.5, "terminal_level": 2, "supports_limits": true},
+    {"id": "entropy", "name": "熵减核心", "description": "模拟可见反馈划分并选择信息量更高的探测猜测，适合高价值限步节点。", "strategy": "information_gain", "compute_cost": 7, "decision_time": 2.0, "terminal_level": 3, "supports_limits": true}
   ],
   "nodes": [
     {
-      "id": "maintenance", "name": "基础维护协议", "code": "MNT-001", "ownership": "permanent", "usage": "infinite", "max_uses": 0,
-      "cost": 0, "reward": 6, "terminal_level": 1, "length": 3, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 0,
-      "risk": "无", "recommended_ai": "probe", "description": "设施最后的保底连接。永久可用、无限尝试，收益很低。", "loot_table": "maintenance", "benchmark": {"average": 3.0, "worst": 8, "solver": "reference-solver-v1", "sample_size": 8}
+      "id": "maintenance", "name": "基础维护协议", "code": "MNT-001", "family": "标准协议", "tags": ["maintenance", "t1", "standard"],
+      "ownership": "permanent", "usage": "infinite", "max_uses": 0, "cost": 0, "reward": 6, "terminal_level": 1,
+      "length": 3, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 0,
+      "handshake_time": 3.0, "prestige_score": 0, "risk": "无", "recommended_ai": "probe",
+      "description": "设施最后的保底连接。永久可用、无限尝试，收益与收藏范围都位于最低档。", "loot_table": "maintenance",
+      "benchmark": {"average": 4.5, "average_guesses": {"probe": 4.5, "filter": 2.63, "entropy": 2.25}, "worst": 8, "solver": "brute-force-v2", "sample_size": 8, "success_rates": {"manual": 100, "probe": 100, "filter": 100, "entropy": 100}}
     },
     {
-      "id": "data_packet", "name": "常规数据封装", "code": "DAT-4B", "ownership": "consumable", "usage": "single", "max_uses": 1,
-      "cost": 10, "reward": 28, "terminal_level": 1, "length": 4, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 0,
-      "risk": "低", "recommended_ai": "probe", "description": "四位二进制一次性数据载体，复杂度高于免费维护协议。启动后成功、放弃都会销毁。", "loot_table": "maintenance", "benchmark": {"average": 3.3, "worst": 5, "solver": "reference-solver-v1", "sample_size": 16}
+      "id": "data_packet", "name": "常规数据封装", "code": "DAT-4B", "family": "标准协议", "tags": ["data", "t1", "standard"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 10, "reward": 28, "terminal_level": 1,
+      "length": 4, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 0,
+      "handshake_time": 5.0, "prestige_score": 0, "risk": "低", "recommended_ai": "probe",
+      "description": "四位二进制一次性数据载体，是最早可重复采购的主动与自动生产节点。", "loot_table": "data",
+      "benchmark": {"average": 8.5, "average_guesses": {"probe": 8.5, "filter": 3.25, "entropy": 2.75}, "worst": 16, "solver": "brute-force-v2", "sample_size": 16, "success_rates": {"manual": 100, "probe": 100, "filter": 100, "entropy": 100}}
     },
     {
-      "id": "security_4b", "name": "受限安保节点", "code": "SEC-4B", "ownership": "consumable", "usage": "single", "max_uses": 1,
-      "cost": 30, "reward": 64, "terminal_level": 2, "length": 4, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 5,
-      "risk": "中", "recommended_ai": "filter", "description": "五次尝试内解除安保封锁；失败后节点损毁。", "loot_table": "security", "benchmark": {"average": 3.3, "worst": 5, "solver": "reference-solver-v1", "sample_size": 16}
+      "id": "security_4b", "name": "受限安保节点", "code": "SEC-4B", "family": "矩阵协议", "tags": ["security", "matrix", "t2", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 30, "reward": 64, "terminal_level": 2,
+      "length": 4, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 4,
+      "handshake_time": 6.0, "prestige_score": 60, "risk": "中", "recommended_ai": "filter",
+      "description": "四次尝试内解除安保封锁。逻辑筛选器并非绝对安全，失败后节点损毁。", "loot_table": "security",
+      "benchmark": {"average": 3.25, "worst": 5, "solver": "reference-solver-v2", "sample_size": 16, "success_rates": {"manual": 80, "filter": 81, "entropy": 100}}
     },
     {
-      "id": "prism_cluster", "name": "棱镜档案簇", "code": "PRI-43", "ownership": "consumable", "usage": "limited", "max_uses": 3,
-      "cost": 90, "reward": 82, "terminal_level": 3, "length": 4, "radix": 3, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 7,
-      "risk": "高", "recommended_ai": "entropy", "description": "包含三组有效协议的档案簇，每次挑战消耗一次完整性。", "loot_table": "prism", "benchmark": {"average": 4.4, "worst": 7, "solver": "reference-solver-v1", "sample_size": 81}
+      "id": "multispectral_dock", "name": "多谱接驳协议", "code": "MSP-26", "family": "多谱协议", "tags": ["multispectral", "security", "t2", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 40, "reward": 92, "terminal_level": 2,
+      "length": 2, "radix": 6, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 5,
+      "handshake_time": 7.0, "prestige_score": 60, "risk": "中", "recommended_ai": "filter",
+      "description": "只包含两个符号位，但每一位可在六种谱值间变化，是最早出现的多谱协议。", "loot_table": "security",
+      "benchmark": {"average": 4.61, "worst": 7, "solver": "reference-solver-v2", "sample_size": 36, "success_rates": {"manual": 82, "filter": 67, "entropy": 100}}
     },
     {
-      "id": "mirror_archive", "name": "镜像观测档案", "code": "MIR-5B", "ownership": "consumable", "usage": "single", "max_uses": 1,
-      "cost": 74, "reward": 168, "terminal_level": 3, "length": 5, "radix": 2, "allow_duplicates": true, "protocol": "mirror", "feedback": "full", "attempt_limit": 5,
-      "risk": "高", "recommended_ai": "filter", "description": "答案沿中心对称。已知结构缩小了空间，但容错很低。", "loot_table": "mirror", "benchmark": {"average": 2.6, "worst": 5, "solver": "reference-solver-v1", "sample_size": 8}
+      "id": "low_frequency_chain", "name": "低频长链协议", "code": "LNK-62", "family": "长链协议", "tags": ["long_chain", "t2", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 42, "reward": 98, "terminal_level": 2,
+      "length": 6, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 5,
+      "handshake_time": 8.0, "prestige_score": 60, "risk": "中", "recommended_ai": "filter",
+      "description": "符号只有零与一，但协议延伸到六位，强调重复结构与位置组合。", "loot_table": "long_chain",
+      "benchmark": {"average": 4.44, "worst": 7, "solver": "reference-solver-v2", "sample_size": 64, "success_rates": {"manual": 76, "filter": 77, "entropy": 100}}
     },
     {
-      "id": "memory_core", "name": "记忆核心残片", "code": "MEM-NULL", "ownership": "unique", "usage": "single", "max_uses": 1,
-      "cost": 220, "reward": 360, "terminal_level": 4, "length": 4, "radix": 4, "allow_duplicates": false, "protocol": "no_repeat", "feedback": "full", "attempt_limit": 6,
-      "risk": "异常", "recommended_ai": "entropy", "description": "唯一剧情节点。失败后会重组，不会永久丢失。", "loot_table": "memory", "protected": true, "benchmark": {"average": 3.3, "worst": 6, "solver": "reference-solver-v1", "sample_size": 24}
+      "id": "mirror_long_archive", "name": "镜像长链档案", "code": "MLA-72", "family": "长链协议", "tags": ["long_chain", "mirror", "t2", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 55, "reward": 125, "terminal_level": 2,
+      "length": 7, "radix": 2, "allow_duplicates": true, "protocol": "mirror", "feedback": "full", "attempt_limit": 3,
+      "handshake_time": 8.0, "prestige_score": 60, "risk": "中", "recommended_ai": "filter",
+      "description": "七位低频长链沿中心镜像。结构显著缩小答案空间，但尝试次数很少。", "loot_table": "long_chain",
+      "benchmark": {"average": 2.69, "worst": 4, "solver": "reference-solver-v2", "sample_size": 16, "success_rates": {"manual": 86, "filter": 75, "entropy": 100}}
+    },
+    {
+      "id": "prism_cluster", "name": "棱镜档案簇", "code": "PRI-43", "family": "矩阵协议", "tags": ["prism", "matrix", "t3", "limited"],
+      "ownership": "consumable", "usage": "limited", "max_uses": 3, "cost": 90, "reward": 82, "terminal_level": 3,
+      "length": 4, "radix": 3, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 5,
+      "handshake_time": 12.0, "prestige_score": 160, "risk": "高", "recommended_ai": "entropy",
+      "description": "包含三组有效协议的档案簇，每次挑战消耗一次完整性。", "loot_table": "prism",
+      "benchmark": {"average": 3.93, "worst": 6, "solver": "reference-solver-v2", "sample_size": 81, "success_rates": {"manual": 82, "filter": 94, "entropy": 100}}
+    },
+    {
+      "id": "quinary_star_map", "name": "五进制星图", "code": "QSM-35", "family": "多谱协议", "tags": ["multispectral", "t3", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 105, "reward": 220, "terminal_level": 3,
+      "length": 3, "radix": 5, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 5,
+      "handshake_time": 12.0, "prestige_score": 160, "risk": "高", "recommended_ai": "filter",
+      "description": "三个符号位承载五种谱值，是中期多谱协议的稳定产出节点。", "loot_table": "multispectral",
+      "benchmark": {"average": 4.57, "worst": 7, "solver": "reference-solver-v2", "sample_size": 125, "success_rates": {"manual": 70, "filter": 87, "entropy": 100}}
+    },
+    {
+      "id": "senary_disorder_lock", "name": "六进制异序锁", "code": "SDL-36", "family": "多谱协议", "tags": ["multispectral", "no_repeat", "t3", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 125, "reward": 270, "terminal_level": 3,
+      "length": 3, "radix": 6, "allow_duplicates": false, "protocol": "no_repeat", "feedback": "full", "attempt_limit": 4,
+      "handshake_time": 14.0, "prestige_score": 160, "risk": "高", "recommended_ai": "entropy",
+      "description": "三个符号位必须互不重复，将多谱结构与异序约束叠加。", "loot_table": "multispectral",
+      "benchmark": {"average": 3.73, "worst": 6, "solver": "reference-solver-v2", "sample_size": 120, "success_rates": {"manual": 68, "filter": 86, "entropy": 94}}
+    },
+    {
+      "id": "octal_pulse", "name": "八进制脉冲", "code": "OCT-28", "family": "多谱协议", "tags": ["multispectral", "t3", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 115, "reward": 240, "terminal_level": 3,
+      "length": 2, "radix": 8, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 7,
+      "handshake_time": 12.0, "prestige_score": 160, "risk": "高", "recommended_ai": "filter",
+      "description": "每个位置拥有八种脉冲值，输入很短，但单位置判断密度极高。", "loot_table": "multispectral",
+      "benchmark": {"average": 5.92, "worst": 9, "solver": "reference-solver-v2", "sample_size": 64, "success_rates": {"manual": 85, "filter": 75, "entropy": 100}}
+    },
+    {
+      "id": "mirror_archive", "name": "镜像观测档案", "code": "MIR-5B", "family": "矩阵协议", "tags": ["mirror", "prism", "t3", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 74, "reward": 168, "terminal_level": 3,
+      "length": 5, "radix": 2, "allow_duplicates": true, "protocol": "mirror", "feedback": "full", "attempt_limit": 2,
+      "handshake_time": 14.0, "prestige_score": 160, "risk": "高", "recommended_ai": "entropy",
+      "description": "答案沿中心对称。已知结构缩小了空间，但两次尝试要求高效率决策。", "loot_table": "prism",
+      "benchmark": {"average": 2.13, "worst": 3, "solver": "reference-solver-v2", "sample_size": 8, "success_rates": {"manual": 82, "filter": 75, "entropy": 88}}
+    },
+    {
+      "id": "deep_binary_chain", "name": "深层二进制链", "code": "DBC-82", "family": "长链协议", "tags": ["long_chain", "t4", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 250, "reward": 520, "terminal_level": 4,
+      "length": 8, "radix": 2, "allow_duplicates": true, "protocol": "standard", "feedback": "full", "attempt_limit": 7,
+      "handshake_time": 20.0, "prestige_score": 320, "risk": "异常", "recommended_ai": "entropy",
+      "description": "八位低频长链拥有二百五十六种组合，是后期长链协议的主要产出节点。", "loot_table": "long_chain",
+      "benchmark": {"average": 5.1, "worst": 8, "solver": "reference-solver-v2-sampled", "sample_size": 256, "success_rates": {"manual": 68, "filter": 84, "entropy": 97}}
+    },
+    {
+      "id": "ternary_echo_matrix", "name": "三元回声阵", "code": "TEM-53", "family": "矩阵协议", "tags": ["matrix", "special_feedback", "t4", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 280, "reward": 620, "terminal_level": 4,
+      "length": 5, "radix": 3, "allow_duplicates": true, "protocol": "standard", "feedback": "total_only", "attempt_limit": 8,
+      "handshake_time": 24.0, "prestige_score": 320, "risk": "异常", "recommended_ai": "entropy",
+      "description": "终端只返回命中总量，不区分位置正确与数字错位。", "loot_table": "deep_validation",
+      "benchmark": {"average": 5.8, "worst": 9, "solver": "visible-feedback-solver-v1", "sample_size": 243, "success_rates": {"manual": 58, "filter": 72, "entropy": 90}}
+    },
+    {
+      "id": "parity_checksum_tower", "name": "奇偶校验塔", "code": "PCT-72", "family": "长链协议", "tags": ["long_chain", "special_feedback", "checksum", "t4", "limited"],
+      "ownership": "consumable", "usage": "single", "max_uses": 1, "cost": 260, "reward": 580, "terminal_level": 4,
+      "length": 7, "radix": 2, "allow_duplicates": true, "protocol": "checksum", "feedback": "full", "attempt_limit": 6,
+      "handshake_time": 22.0, "prestige_score": 320, "risk": "异常", "recommended_ai": "entropy",
+      "description": "前六位构成长链，最后一位必须等于前六位之和对二取模的校验值。", "loot_table": "deep_validation",
+      "benchmark": {"average": 4.2, "worst": 6, "solver": "reference-solver-v2", "sample_size": 64, "success_rates": {"manual": 78, "filter": 88, "entropy": 98}}
+    },
+    {
+      "id": "memory_core", "name": "记忆核心残片", "code": "MEM-NULL", "family": "矩阵协议", "tags": ["memory", "special_feedback", "t4", "limited"],
+      "ownership": "unique", "usage": "single", "max_uses": 1, "cost": 220, "reward": 360, "terminal_level": 4,
+      "length": 4, "radix": 4, "allow_duplicates": false, "protocol": "no_repeat", "feedback": "full", "attempt_limit": 4,
+      "handshake_time": 30.0, "prestige_score": 500, "risk": "异常", "recommended_ai": "entropy",
+      "description": "唯一剧情节点。失败后会重组，不会永久丢失，并为零界回溯提供核心证明。", "loot_table": "memory", "protected": true,
+      "benchmark": {"average": 3.67, "worst": 6, "solver": "reference-solver-v2", "sample_size": 24, "success_rates": {"manual": 72, "filter": 75, "entropy": 79}}
     }
   ],
   "loot": [
-    {"id": "coolant_pin", "name": "冷却针脚", "series": "maintenance_set", "rarity": "常见", "fragment_value": 1, "description": "仍在散发微弱蓝光的维护构件。"},
-    {"id": "service_glyph", "name": "维修字形片", "series": "maintenance_set", "rarity": "稀有", "fragment_value": 2, "description": "人类标记覆盖在更古老的刻痕之上。"},
-    {"id": "watcher_lens", "name": "监视者透镜", "series": "security_set", "rarity": "稀有", "fragment_value": 3, "description": "它在没有电源时仍会转向观察者。"},
-    {"id": "lock_spine", "name": "锁脊", "series": "security_set", "rarity": "精密", "fragment_value": 5, "description": "一段无法以常规工具切割的黑色构件。"},
-    {"id": "prism_seed", "name": "棱镜种子", "series": "prism_set", "rarity": "精密", "fragment_value": 6, "description": "内部折射出从未发生过的星图。"},
-    {"id": "silent_index", "name": "静默索引", "series": "prism_set", "rarity": "异常", "fragment_value": 10, "description": "目录指向的档案比设施本身更加古老。"},
-    {"id": "operator_tag", "name": "操作员铭牌", "series": "memory_set", "rarity": "异常", "fragment_value": 12, "description": "铭牌上的照片是你，姓名却不是。"},
-    {"id": "zero_echo", "name": "零点回声", "series": "memory_set", "rarity": "唯一", "fragment_value": 0, "description": "一段拒绝被复制的记忆波形。", "unique": true}
+    {"id": "pod_seal", "name": "休眠舱封签", "series": "awakening_set", "rarity": "常见", "fragment_value": 1, "effect_text": "基础维护协议能量 +2%", "effects": [{"type": "energy_bonus", "value": 0.02, "node_tags": ["maintenance"]}], "description": "封签上的日期比设施已知建造时间更早。"},
+    {"id": "emergency_capacitor", "name": "应急电容", "series": "awakening_set", "rarity": "常见", "fragment_value": 1, "effect_text": "维护/数据节点自动周期 -2%", "effects": [{"type": "cycle_speed", "value": 0.02, "node_tags": ["maintenance", "data"]}], "description": "仍保留着唤醒瞬间的微弱电荷。"},
+    {"id": "wake_log", "name": "唤醒日志页", "series": "awakening_set", "rarity": "稀有", "fragment_value": 2, "effect_text": "常规数据封装能量 +3%", "effects": [{"type": "energy_bonus", "value": 0.03, "node_tags": ["data"]}], "description": "同一条苏醒记录被覆盖书写了许多次。"},
+
+    {"id": "coolant_pin", "name": "冷却针脚", "series": "maintenance_set", "rarity": "常见", "fragment_value": 1, "effect_text": "维护/数据节点自动周期 -4%", "effects": [{"type": "cycle_speed", "value": 0.04, "node_tags": ["maintenance", "data"]}], "description": "仍在散发微弱蓝光的维护构件。"},
+    {"id": "service_glyph", "name": "维修字形片", "series": "maintenance_set", "rarity": "稀有", "fragment_value": 2, "effect_text": "维护/数据节点能量 +5%", "effects": [{"type": "energy_bonus", "value": 0.05, "node_tags": ["maintenance", "data"]}], "description": "人类标记覆盖在更古老的刻痕之上。"},
+
+    {"id": "watcher_lens", "name": "监视者透镜", "series": "security_set", "rarity": "稀有", "fragment_value": 3, "effect_text": "逻辑筛选器周期 -5%", "effects": [{"type": "cycle_speed", "value": 0.05, "ai_ids": ["filter"]}], "description": "它在没有电源时仍会转向观察者。"},
+    {"id": "lock_spine", "name": "锁脊", "series": "security_set", "rarity": "精密", "fragment_value": 5, "effect_text": "消耗节点失败返还 +5%", "effects": [{"type": "failure_refund", "value": 0.05}], "description": "一段无法以常规工具切割的黑色构件。"},
+    {"id": "pulse_seal", "name": "脉冲封条", "series": "security_set", "rarity": "异常", "fragment_value": 7, "effect_text": "安保节点/多谱协议能量 +4%", "effects": [{"type": "energy_bonus", "value": 0.04, "node_tags": ["security", "multispectral"]}], "description": "封条内部仍在循环播放一段拒绝访问的脉冲。"},
+
+    {"id": "phase_comb", "name": "相位梳", "series": "long_chain_set", "rarity": "稀有", "fragment_value": 4, "effect_text": "长链协议能量 +5%", "effects": [{"type": "energy_bonus", "value": 0.05, "node_tags": ["long_chain"]}], "description": "梳齿间距与二进制长链的节拍完全一致。"},
+    {"id": "bit_loom", "name": "比特织机", "series": "long_chain_set", "rarity": "精密", "fragment_value": 6, "effect_text": "长链协议握手 -5%", "effects": [{"type": "handshake_speed", "value": 0.05, "node_tags": ["long_chain"]}], "description": "它将连续信号编织成可以触摸的结构。"},
+    {"id": "parity_scar", "name": "奇偶伤痕", "series": "long_chain_set", "rarity": "异常", "fragment_value": 8, "effect_text": "长链协议掉率相对 +6%", "effects": [{"type": "loot_bonus", "value": 0.06, "node_tags": ["long_chain"]}], "description": "伤痕会在每次校验失败时改变方向。"},
+
+    {"id": "prism_seed", "name": "棱镜种子", "series": "prism_set", "rarity": "精密", "fragment_value": 6, "effect_text": "熵减核心决策时间 -6%", "effects": [{"type": "ai_speed", "value": 0.06, "ai_ids": ["entropy"]}], "description": "内部折射出从未发生过的星图。"},
+    {"id": "silent_index", "name": "静默索引", "series": "prism_set", "rarity": "异常", "fragment_value": 10, "effect_text": "棱镜/镜像节点能量 +7%", "effects": [{"type": "energy_bonus", "value": 0.07, "node_tags": ["prism", "mirror"]}], "description": "目录指向的档案比设施本身更加古老。"},
+    {"id": "facet_stabilizer", "name": "切面稳定器", "series": "prism_set", "rarity": "异常", "fragment_value": 12, "effect_text": "T-3 节点掉率相对 +6%", "effects": [{"type": "loot_bonus", "value": 0.06, "node_tags": ["t3"]}], "description": "稳定器固定的不是光线，而是观察结果。"},
+
+    {"id": "spectrum_dial", "name": "多谱刻度盘", "series": "multispectral_set", "rarity": "精密", "fragment_value": 8, "effect_text": "多谱协议能量 +7%", "effects": [{"type": "energy_bonus", "value": 0.07, "node_tags": ["multispectral"]}], "description": "刻度盘同时标记了八套互不相容的数字系统。"},
+    {"id": "radix_converter", "name": "进制转换器", "series": "multispectral_set", "rarity": "异常", "fragment_value": 12, "effect_text": "多谱协议握手 -7%", "effects": [{"type": "handshake_speed", "value": 0.07, "node_tags": ["multispectral"]}], "description": "它不转换数值，只转换观察者理解数值的方式。"},
+    {"id": "overflow_ring", "name": "溢出环", "series": "multispectral_set", "rarity": "唯一", "fragment_value": 15, "effect_text": "多谱协议手动效率奖励 +8%", "effects": [{"type": "manual_efficiency_bonus", "value": 0.08, "node_tags": ["multispectral"]}], "description": "所有超出表示范围的数字最终都会回到环中。"},
+
+    {"id": "error_bone", "name": "误差骨片", "series": "deep_validation_set", "rarity": "异常", "fragment_value": 15, "effect_text": "特殊反馈节点能量 +9%", "effects": [{"type": "energy_bonus", "value": 0.09, "node_tags": ["special_feedback"]}], "description": "骨片记录的错误比正确结果更加稳定。"},
+    {"id": "silent_checksum", "name": "静默校验和", "series": "deep_validation_set", "rarity": "异常", "fragment_value": 22, "effect_text": "特殊反馈节点自动周期 -8%", "effects": [{"type": "cycle_speed", "value": 0.08, "node_tags": ["special_feedback"]}], "description": "校验结果为空，但终端坚持它是有效值。"},
+    {"id": "clean_sample", "name": "无污染样本", "series": "deep_validation_set", "rarity": "唯一", "fragment_value": 30, "effect_text": "特殊反馈节点失败返还 +8%", "effects": [{"type": "failure_refund", "value": 0.08, "node_tags": ["special_feedback"]}], "description": "设施将它标为无污染，这本身就足够可疑。"},
+
+    {"id": "operator_tag", "name": "操作员铭牌", "series": "memory_set", "rarity": "异常", "fragment_value": 12, "effect_text": "全部协议能量 +6%", "effects": [{"type": "energy_bonus", "value": 0.06}], "description": "铭牌上的照片是你，姓名却不是。"},
+    {"id": "zero_echo", "name": "零点回声", "series": "memory_set", "rarity": "唯一", "fragment_value": 25, "effect_text": "零界回声结算 +8%", "effects": [{"type": "prestige_bonus", "value": 0.08}], "description": "一段拒绝被复制的记忆波形。", "unique": true},
+    {"id": "loop_signature", "name": "循环签名", "series": "memory_set", "rarity": "唯一", "fragment_value": 20, "effect_text": "全部自动周期 -5%", "effects": [{"type": "cycle_speed", "value": 0.05}], "description": "签名的每一笔都通向下一次苏醒。", "unique": true},
+
+    {"id": "boundary_rangefinder", "name": "边界测距器", "series": "null_boundary_set", "rarity": "异常", "fragment_value": 30, "effect_text": "T-4 以上节点能量 +10%", "effects": [{"type": "energy_bonus", "value": 0.10, "node_tags": ["t4"]}], "description": "它测出的边界总比设施外壳远一毫米。"},
+    {"id": "unmade_record", "name": "未发生记录", "series": "null_boundary_set", "rarity": "唯一", "fragment_value": 40, "effect_text": "离线效率 +5 个百分点", "effects": [{"type": "offline_efficiency", "value": 0.05}], "description": "记录详细描述了一次从未发生的回溯。", "unique": true},
+    {"id": "recursion_lens", "name": "回溯透镜", "series": "null_boundary_set", "rarity": "唯一", "fragment_value": 50, "effect_text": "零界回声结算 +10%", "effects": [{"type": "prestige_bonus", "value": 0.10}], "description": "透过它可以看见观察者上一次眨眼。", "unique": true},
+    {"id": "closed_coordinate", "name": "闭环坐标", "series": "null_boundary_set", "rarity": "唯一", "fragment_value": 0, "effect_text": "回溯后节点掉率相对 +12%", "effects": [{"type": "loot_bonus", "value": 0.12, "min_cycle": 2}], "description": "坐标没有起点，也没有能够离开的方向。", "unique": true}
   ],
   "loot_tables": {
-    "maintenance": [{"id": "coolant_pin", "chance": 0.16}, {"id": "service_glyph", "chance": 0.05}],
-    "security": [{"id": "watcher_lens", "chance": 0.42}, {"id": "lock_spine", "chance": 0.16}],
-    "prism": [{"id": "prism_seed", "chance": 0.48}, {"id": "silent_index", "chance": 0.18}],
-    "mirror": [{"id": "watcher_lens", "chance": 0.28}, {"id": "prism_seed", "chance": 0.22}],
-    "memory": [{"id": "operator_tag", "chance": 1.0}, {"id": "zero_echo", "chance": 1.0}]
+    "maintenance": [
+      {"id": "emergency_capacitor", "chance": 0.30}, {"id": "wake_log", "chance": 0.12},
+      {"id": "coolant_pin", "chance": 0.16}, {"id": "service_glyph", "chance": 0.05}
+    ],
+    "data": [
+      {"id": "emergency_capacitor", "chance": 0.30}, {"id": "wake_log", "chance": 0.12},
+      {"id": "coolant_pin", "chance": 0.16}, {"id": "service_glyph", "chance": 0.05}
+    ],
+    "security": [
+      {"id": "watcher_lens", "chance": 0.30}, {"id": "lock_spine", "chance": 0.14}, {"id": "pulse_seal", "chance": 0.06}
+    ],
+    "long_chain": [
+      {"id": "phase_comb", "chance": 0.20}, {"id": "bit_loom", "chance": 0.08}, {"id": "parity_scar", "chance": 0.04}
+    ],
+    "prism": [
+      {"id": "prism_seed", "chance": 0.15}, {"id": "silent_index", "chance": 0.07}, {"id": "facet_stabilizer", "chance": 0.03}
+    ],
+    "multispectral": [
+      {"id": "spectrum_dial", "chance": 0.12}, {"id": "radix_converter", "chance": 0.05}, {"id": "overflow_ring", "chance": 0.025}
+    ],
+    "deep_validation": [
+      {"id": "error_bone", "chance": 0.08}, {"id": "silent_checksum", "chance": 0.03}, {"id": "clean_sample", "chance": 0.015},
+      {"id": "zero_echo", "chance": 0.06}, {"id": "loop_signature", "chance": 0.02},
+      {"id": "boundary_rangefinder", "chance": 0.04, "min_cycle": 2}, {"id": "unmade_record", "chance": 0.02, "min_cycle": 2},
+      {"id": "recursion_lens", "chance": 0.01, "min_cycle": 2}, {"id": "closed_coordinate", "chance": 0.005, "min_cycle": 2}
+    ],
+    "memory": [
+      {"id": "operator_tag", "chance": 1.0}, {"id": "zero_echo", "chance": 0.06}, {"id": "loop_signature", "chance": 0.02}
+    ],
+    "null_boundary": [
+      {"id": "boundary_rangefinder", "chance": 0.04}, {"id": "unmade_record", "chance": 0.02},
+      {"id": "recursion_lens", "chance": 0.01}, {"id": "closed_coordinate", "chance": 0.005}
+    ]
   },
   "series": [
-    {"id": "maintenance_set", "name": "维护环构件", "reward_fragments": 3, "memory": "maintenance_memory"},
-    {"id": "security_set", "name": "安保残骸", "reward_fragments": 5, "memory": "security_memory"},
-    {"id": "prism_set", "name": "棱镜档案", "reward_fragments": 8, "memory": "prism_memory"},
-    {"id": "memory_set", "name": "未知操作员记录", "reward_fragments": 15, "memory": "operator_memory"}
+    {"id": "awakening_set", "name": "苏醒舱残留", "tier": 1, "source_text": "教学结算；T-1 基础维护协议与常规数据封装", "reward_fragments": 2, "memory": "awakening_collection", "completed_effect_multiplier": 2.0, "hard_pity": 14},
+    {"id": "maintenance_set", "name": "维护环构件", "tier": 1, "source_text": "T-1 基础维护协议与常规数据封装", "reward_fragments": 3, "memory": "maintenance_memory", "completed_effect_multiplier": 2.0, "hard_pity": 24},
+    {"id": "security_set", "name": "安保残骸", "tier": 2, "source_text": "T-2 安保节点与多谱接驳协议", "reward_fragments": 6, "memory": "security_memory", "completed_effect_multiplier": 2.0, "hard_pity": 28},
+    {"id": "long_chain_set", "name": "长链通讯遗物", "tier": 2, "source_text": "T-2 以上长链协议", "reward_fragments": 8, "memory": "long_chain_memory", "completed_effect_multiplier": 2.0, "hard_pity": 40},
+    {"id": "prism_set", "name": "棱镜档案", "tier": 3, "source_text": "T-3 棱镜与镜像协议", "reward_fragments": 12, "memory": "prism_memory", "completed_effect_multiplier": 2.0, "hard_pity": 55},
+    {"id": "multispectral_set", "name": "多谱编码样本", "tier": 3, "source_text": "T-3 以上多谱协议", "reward_fragments": 15, "memory": "multispectral_memory", "completed_effect_multiplier": 2.0, "hard_pity": 70},
+    {"id": "deep_validation_set", "name": "深层校验遗物", "tier": 4, "source_text": "T-4 特殊反馈与校验协议", "reward_fragments": 24, "memory": "deep_validation_memory", "completed_effect_multiplier": 2.0, "hard_pity": 110},
+    {"id": "memory_set", "name": "未知操作员记录", "tier": 4, "source_text": "T-4 记忆核心与深层校验协议", "reward_fragments": 30, "memory": "operator_memory", "completed_effect_multiplier": 2.0, "hard_pity": 90},
+    {"id": "null_boundary_set", "name": "零界观测组", "tier": 5, "min_cycle": 2, "source_text": "第 2 周目起的 T-4 深层节点", "reward_fragments": 50, "memory": "null_boundary_memory", "completed_effect_multiplier": 2.0, "hard_pity": 220}
   ],
   "tech": [
-    {"id": "risk_analysis", "name": "风险分析", "branch": "终端", "energy_cost": 35, "fragment_cost": 0, "terminal_level": 2, "requires": [], "description": "显示节点基准平均次数、最坏次数和当前风险。"},
-    {"id": "logic_filter", "name": "逻辑筛选器", "branch": "AI", "energy_cost": 55, "fragment_cost": 2, "terminal_level": 2, "requires": [], "description": "解锁中级 AI，可处理基础限步节点。", "unlocks_ai": "filter"},
-    {"id": "entropy_core", "name": "熵减核心", "branch": "AI", "energy_cost": 190, "fragment_cost": 10, "terminal_level": 3, "requires": ["logic_filter"], "description": "解锁高级信息增益 AI。", "unlocks_ai": "entropy"},
-    {"id": "overclock", "name": "运算加速", "branch": "AI", "energy_cost": 80, "fragment_cost": 4, "terminal_level": 2, "requires": ["logic_filter"], "description": "所有 AI 的决策等待时间缩短 25%。"},
-    {"id": "auto_settle", "name": "自动结算", "branch": "自动化", "energy_cost": 32, "fragment_cost": 0, "terminal_level": 1, "requires": [], "description": "手动通道完成后也会自动领取奖励。"},
-    {"id": "risk_breaker", "name": "风险熔断", "branch": "自动化", "energy_cost": 95, "fragment_cost": 3, "terminal_level": 2, "requires": ["auto_settle"], "description": "协议能量低于安全储备时阻止高风险采购。"},
-    {"id": "insurance", "name": "启动保险", "branch": "经济", "energy_cost": 110, "fragment_cost": 5, "terminal_level": 2, "requires": [], "description": "消耗节点失败时返还购买成本的 25%。"},
-    {"id": "auto_dismantle", "name": "重复品自动分解", "branch": "战利品", "energy_cost": 60, "fragment_cost": 3, "terminal_level": 2, "requires": [], "description": "重复战利品自动转化为计算碎片。"}
+    {"id": "auto_settle", "name": "自动结算", "branch": "自动化", "energy_cost": 40, "fragment_cost": 0, "channel_cost_ratio": 0.15, "cost_rounding": 5, "max_level": 4, "level_cap_by_channels": true, "terminal_level": 1, "requires": [], "description": "每级使算力优先级靠前的一条通道自动领取结果；后续等级成本为对应通道价格的 15%。", "level_display": {"label": "自动结算覆盖", "value": 1, "format": "channels"}},
+    {"id": "auto_restock", "name": "自动重购", "branch": "自动化", "energy_cost": 60, "fragment_cost": 0, "cost_growth": 2.0, "tier_cost_ratio": 0.40, "cost_rounding": 5, "max_level": 4, "level_cap_by_terminal": true, "terminal_level": 1, "requires": ["auto_settle"], "description": "每级将连续采购扩展至高一级节点；科技等级不能超过当前终端等级。", "level_display": {"label": "自动重购覆盖", "value": 1, "format": "tiers"}},
+    {"id": "risk_analysis", "name": "风险分析", "branch": "终端", "energy_cost": 90, "fragment_cost": 0, "terminal_level": 2, "requires": [], "description": "显示节点基准平均次数、最坏次数和当前 AI 的基准成功率。"},
+    {"id": "logic_filter", "name": "逻辑筛选器", "branch": "AI", "energy_cost": 270, "fragment_cost": 2, "terminal_level": 2, "requires": [], "description": "解锁中级 AI，可处理基础限步节点。", "unlocks_ai": "filter"},
+    {"id": "entropy_core", "name": "熵减核心", "branch": "AI", "energy_cost": 2350, "fragment_cost": 18, "terminal_level": 3, "requires": ["logic_filter"], "description": "解锁高级信息增益 AI。", "unlocks_ai": "entropy"},
+    {"id": "risk_breaker", "name": "风险熔断", "branch": "自动化", "energy_cost": 480, "fragment_cost": 5, "terminal_level": 2, "requires": ["auto_settle"], "description": "协议能量低于安全储备时阻止高风险采购。"},
+
+    {"id": "overclock", "name": "运算频率", "branch": "AI", "energy_cost": 18, "fragment_cost": 0, "cost_growth": 1.55, "cost_rounding": 5, "max_level": 20, "terminal_level": 1, "requires": [], "description": "每级使全部 AI 的单步决策时间缩短 2.5%。", "level_display": {"label": "全部 AI 决策时间", "value": 0.025, "format": "reduction_percent"}, "effects": [{"type": "ai_speed", "value": 0.025}]},
+    {"id": "protocol_pipeline", "name": "链路流水线", "branch": "自动化", "energy_cost": 24, "fragment_cost": 0, "cost_growth": 1.60, "cost_rounding": 5, "max_level": 15, "terminal_level": 1, "requires": [], "description": "每级使全部节点的协议握手时间缩短 2%。", "level_display": {"label": "全部节点握手时间", "value": 0.02, "format": "reduction_percent"}, "effects": [{"type": "handshake_speed", "value": 0.02}]},
+    {"id": "manual_calibration", "name": "主动校准", "branch": "经济", "energy_cost": 30, "fragment_cost": 0, "cost_growth": 1.75, "cost_rounding": 5, "max_level": 10, "terminal_level": 1, "requires": [], "description": "每级使手动破解的协议能量提高 6%，不改变战利品掉率。", "level_display": {"label": "手动协议能量", "value": 0.06, "format": "bonus_percent"}, "effects": [{"type": "manual_reward_bonus", "value": 0.06}]},
+    {"id": "multi_channel_scheduling", "name": "多路调度", "branch": "自动化", "energy_cost": 75, "fragment_cost": 0, "cost_growth": 1.75, "cost_rounding": 5, "max_level": 8, "terminal_level": 2, "requires": ["auto_settle"], "description": "同时运行至少两条 AI 通道时，每级额外缩短握手时间 2%。", "level_display": {"label": "多通道握手时间", "value": 0.02, "format": "reduction_percent"}, "effects": [{"type": "handshake_speed", "value": 0.02, "requires_active_channels": 2}]},
+    {"id": "insurance", "name": "启动保险", "branch": "经济", "energy_cost": 160, "fragment_cost": 0, "cost_growth": 1.85, "cost_rounding": 5, "max_level": 8, "terminal_level": 2, "requires": [], "description": "每级使消耗节点失败时的购买成本返还提高 5%。", "level_display": {"label": "失败成本返还", "value": 0.05, "format": "bonus_percent"}, "effects": [{"type": "failure_refund", "value": 0.05}]},
+    {"id": "feedback_compression", "name": "反馈总线", "branch": "AI", "energy_cost": 220, "fragment_cost": 0, "cost_growth": 1.80, "cost_rounding": 5, "max_level": 10, "terminal_level": 3, "requires": ["logic_filter"], "description": "每级使全部 AI 的握手与决策时间缩短 2%。", "level_display": {"label": "全部 AI 完整周期", "value": 0.02, "format": "reduction_percent"}, "effects": [{"type": "cycle_speed", "value": 0.02}]},
+
+    {"id": "probe_vectorization", "name": "探针向量化", "branch": "AI", "energy_cost": 45, "fragment_cost": 0, "terminal_level": 1, "requires": [], "description": "序列探针专用的一次性优化，使其决策时间额外缩短 12%。", "effects": [{"type": "ai_speed", "value": 0.12, "ai_ids": ["probe"]}]},
+    {"id": "candidate_cache", "name": "候选缓存", "branch": "AI", "energy_cost": 110, "fragment_cost": 1, "terminal_level": 2, "requires": ["logic_filter"], "description": "逻辑筛选器专用的一次性优化，使其决策时间额外缩短 15%。", "effects": [{"type": "ai_speed", "value": 0.15, "ai_ids": ["filter"]}]},
+    {"id": "entropy_optimization", "name": "熵核心优化", "branch": "AI", "energy_cost": 420, "fragment_cost": 4, "terminal_level": 3, "requires": ["entropy_core"], "description": "熵减核心专用的一次性优化，使其决策时间额外缩短 18%。", "effects": [{"type": "ai_speed", "value": 0.18, "ai_ids": ["entropy"]}]},
+
+    {"id": "protocol_amplification", "name": "无界增幅", "branch": "经济", "energy_cost": 3000, "fragment_cost": 0, "cost_growth": 2.25, "cost_rounding": 5, "infinite": true, "terminal_level": 4, "requires": [], "description": "每级使全部协议能量提高 3%；价格指数增长，提供超大后期的持续投资目标。", "level_display": {"label": "全部协议能量", "value": 0.03, "format": "bonus_percent"}, "effects": [{"type": "energy_bonus", "value": 0.03}]}
   ],
   "memories": [
     {"id": "awakening", "title": "记录 00 / 苏醒", "text": "生命维持恢复的瞬间，你听见广播改变了一个音节。它不是在欢迎幸存者。它在确认实验继续。"},
-    {"id": "first_consumable", "title": "记录 01 / 损耗", "text": "节点外壳上的焦痕与你掌心旧伤完全吻合。你以前也启动过它。也许不止一次。"},
-    {"id": "maintenance_memory", "title": "记录 02 / 维护员", "text": "维护日志将你的权限标为“临时”，有效期却横跨了四百三十七年。"},
-    {"id": "security_memory", "title": "记录 03 / 封锁", "text": "安保系统没有阻止你进入。它阻止设施里的某样东西离开。"},
-    {"id": "prism_memory", "title": "记录 04 / 星图", "text": "棱镜保存的航线终点不是某颗恒星，而是一段被从坐标系中挖掉的空白。"},
-    {"id": "operator_memory", "title": "记录 05 / 操作员", "text": "所有操作员记录都指向你。每份记录的笔迹、基因与记忆校验却互不相同。"},
-    {"id": "terminal_2", "title": "记录 06 / 第二次启动", "text": "终端升级日志显示：这是它第九次被你从同一位置启动。"},
-    {"id": "terminal_3", "title": "记录 07 / 观察", "text": "档案层正在预测你的下一次猜测。预测结果的时间戳早于你的苏醒。"},
-    {"id": "core_truth", "title": "记录 08 / 零界", "text": "你没有在破解设施。设施用每一次反馈重新构造你的思维，而航线的终点，是下一次苏醒。"}
+    {"id": "automation_guide", "title": "操作指引 / 自动化起步", "unlock_hint": "完成苏醒教学", "text": "下一步先使用教学赠送的常规数据封装积累协议能量。达到 36 E 后，前往“04 终端”购买第一组算力；这会解锁序列探针。返回“01 解译”，为通道选择序列探针，AI 就会开始猜测。AI 运行期间可在“05 科技”反复提升低价产能等级；自动结算每级覆盖算力优先级靠前的一条通道。"},
+    {"id": "feedback_guide", "title": "操作指引 / 反馈判读", "unlock_hint": "完成苏醒教学", "text": "“位置正确”表示数字和位置均正确；“数字错位”表示数字存在但位置错误。破解成功后需要执行结算；被自动结算科技覆盖的通道可省略手动确认。特殊协议可能只返回命中总量或正确位置，DOS 标题会注明当前反馈类型。"},
+    {"id": "collection_guide", "title": "操作指引 / 收藏被动", "unlock_hint": "首次获得收藏品", "text": "收藏品第一次取得后，其“持有效果”立即永久生效。集齐同一系列后，该系列内每一件收藏的持有效果都会翻倍；重复品会自动分解为计算碎片。"},
+    {"id": "compute_guide", "title": "操作指引 / 算力与 AI", "unlock_hint": "首次购买算力", "text": "算力是 AI 持续占用的运行容量，不会随猜测消耗。为通道选择 AI 后，它会经历协议握手和逐次决策；算力不足的通道进入等待队列。建立多条通道后，可在解译界面调整算力优先级；已经开始的握手或推演不会被抢占。自动结算每级覆盖优先级靠前的一条通道。"},
+    {"id": "first_consumable", "title": "记录 01 / 损耗", "unlock_hint": "成功结算一次消耗型节点", "text": "节点外壳上的焦痕与你掌心旧伤完全吻合。你以前也启动过它。也许不止一次。"},
+    {"id": "awakening_collection", "title": "记录 02 / 封签", "unlock_hint": "集齐“苏醒舱残留”系列", "text": "休眠舱封签记录了多次开启。每一次，舱内都是同一个人。"},
+    {"id": "maintenance_memory", "title": "记录 03 / 维护员", "unlock_hint": "集齐“维护环构件”系列", "text": "维护日志将你的权限标为“临时”，有效期却横跨了四百三十七年。"},
+    {"id": "security_memory", "title": "记录 04 / 封锁", "unlock_hint": "集齐“安保残骸”系列", "text": "安保系统没有阻止你进入。它阻止设施里的某样东西离开。"},
+    {"id": "long_chain_memory", "title": "记录 05 / 长链", "unlock_hint": "集齐“长链通讯遗物”系列", "text": "低频链条穿过所有区域，像一条被刻意隐藏的神经。"},
+    {"id": "prism_memory", "title": "记录 06 / 星图", "unlock_hint": "集齐“棱镜档案”系列", "text": "棱镜保存的航线终点不是某颗恒星，而是一段被从坐标系中挖掉的空白。"},
+    {"id": "multispectral_memory", "title": "记录 07 / 多谱", "unlock_hint": "集齐“多谱编码样本”系列", "text": "每套进制都描述了同一座设施，却没有任何两套得出相同的房间数量。"},
+    {"id": "deep_validation_memory", "title": "记录 08 / 校验", "unlock_hint": "集齐“深层校验遗物”系列", "text": "终端不是在判断答案正确与否。它在判断你是否会接受它给出的反馈。"},
+    {"id": "operator_memory", "title": "记录 09 / 操作员", "unlock_hint": "集齐“未知操作员记录”系列", "text": "所有操作员记录都指向你。每份记录的笔迹、基因与记忆校验却互不相同。"},
+    {"id": "null_boundary_memory", "title": "记录 10 / 边界", "unlock_hint": "回溯后集齐“零界观测组”系列", "text": "所谓边界只是下一次苏醒尚未加载的部分。"},
+    {"id": "terminal_2", "title": "记录 11 / 第二次启动", "unlock_hint": "将终端升级至 T-2", "text": "终端升级日志显示：这是它第九次被你从同一位置启动。"},
+    {"id": "terminal_3", "title": "记录 12 / 观察", "unlock_hint": "将终端升级至 T-3", "text": "档案层正在预测你的下一次猜测。预测结果的时间戳早于你的苏醒。"},
+    {"id": "core_truth", "title": "记录 13 / 零界", "unlock_hint": "成功解译记忆核心残片", "text": "你没有在破解设施。设施用每一次反馈重新构造你的思维，而航线的终点，是下一次苏醒。"}
   ]
 }

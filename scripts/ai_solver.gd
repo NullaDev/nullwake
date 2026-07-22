@@ -4,6 +4,7 @@ extends RefCounted
 
 static func choose_guess(strategy: String, node: Dictionary, history: Array) -> String:
 	var candidates := PuzzleEngine.generate_candidates(node)
+	var feedback_type: String = node.get("feedback", "full")
 	var guessed := {}
 	for record: Dictionary in history:
 		guessed[record.get("guess", "")] = true
@@ -13,12 +14,12 @@ static func choose_guess(strategy: String, node: Dictionary, history: Array) -> 
 				if not guessed.has(candidate):
 					return candidate
 		"elimination":
-			var remaining := _remaining_candidates(candidates, history)
+			var remaining := _remaining_candidates(candidates, history, feedback_type)
 			for candidate in remaining:
 				if not guessed.has(candidate):
 					return candidate
 		"information_gain":
-			return _information_guess(candidates, history, guessed)
+			return _information_guess(candidates, history, guessed, feedback_type)
 	for candidate in candidates:
 		if not guessed.has(candidate):
 			return candidate
@@ -26,19 +27,19 @@ static func choose_guess(strategy: String, node: Dictionary, history: Array) -> 
 
 
 static func candidate_count(node: Dictionary, history: Array) -> int:
-	return _remaining_candidates(PuzzleEngine.generate_candidates(node), history).size()
+	return _remaining_candidates(PuzzleEngine.generate_candidates(node), history, node.get("feedback", "full")).size()
 
 
-static func _remaining_candidates(candidates: Array[String], history: Array) -> Array[String]:
+static func _remaining_candidates(candidates: Array[String], history: Array, feedback_type: String) -> Array[String]:
 	var result: Array[String] = []
 	for candidate in candidates:
-		if PuzzleEngine.candidate_consistent(candidate, history):
+		if PuzzleEngine.candidate_consistent(candidate, history, feedback_type):
 			result.append(candidate)
 	return result
 
 
-static func _information_guess(all_guesses: Array[String], history: Array, guessed: Dictionary) -> String:
-	var remaining := _remaining_candidates(all_guesses, history)
+static func _information_guess(all_guesses: Array[String], history: Array, guessed: Dictionary, feedback_type: String) -> String:
+	var remaining := _remaining_candidates(all_guesses, history, feedback_type)
 	if remaining.size() <= 2:
 		for candidate in remaining:
 			if not guessed.has(candidate):
@@ -57,7 +58,7 @@ static func _information_guess(all_guesses: Array[String], history: Array, guess
 			continue
 		var partitions := {}
 		for candidate in remaining:
-			var result := PuzzleEngine.feedback(candidate, possible_guess)
+			var result := PuzzleEngine.visible_feedback(candidate, possible_guess, feedback_type)
 			var key := "%d:%d" % [result.exact, result.misplaced]
 			partitions[key] = int(partitions.get(key, 0)) + 1
 		var squared_sum := 0.0
@@ -69,4 +70,3 @@ static func _information_guess(all_guesses: Array[String], history: Array, guess
 			best_guess = possible_guess
 			best_is_candidate = is_candidate
 	return best_guess
-
